@@ -1,0 +1,983 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Five Placeholder Papers</title>
+<meta name="description" content="Reading guide to five papers on one topic (2023–2026): family map, paper cards, side-by-side comparison, shared benchmarks and cross-paper patterns.">
+<link rel="stylesheet" href="assets/site.css">
+<script defer src="assets/site.js"></script>
+<!-- Index template. Fill in this order: (1) the #collection JSON near the end of the file (it draws the family map,
+     the cards, the comparison table and its filters); (2) the hand-written prose: header, section headings (claims),
+     intros, the map caption, the shared-benchmarks table and the patterns. Everything marked FILL is placeholder.
+     Keep site.js deferred here: the builder script at the end of <body> must run first, so site.js finds the generated
+     comparison table and makes it sortable. -->
+<style>
+/* page-local styles for the index (prefix ix- / fm-); tokens from site.css only */
+.ix-lede { font-size: 1.05rem; line-height: 1.6; max-width: 46em; margin: 0 0 1rem; }
+.ix-how { font-size: .95rem; color: var(--muted); max-width: 46em; margin: 0 0 1.6rem; }
+
+/* family map */
+.fm-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem .6rem; margin-bottom: .7rem; }
+.fm-bar .lbl { font: 600 .74rem/1 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-right: .2rem; }
+.fm-scroll { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
+.fm-svg { display: block; width: 100%; min-width: 980px; height: auto; overflow: visible; }
+.fm-hint { display: none; font-size: .78rem; color: var(--faint); margin: .3rem 0 0; }
+@media (max-width: 1040px) { .fm-hint { display: block; } }
+.fm-svg .lane-bg { fill: var(--surface-2); }
+.fm-svg .lane-rule { stroke: var(--border); stroke-width: 1; }
+.fm-svg .lane-lab { font: 600 11px var(--font-mono); letter-spacing: .06em; fill: var(--muted); }
+.fm-svg .band-lab { font: 500 11px var(--font-mono); fill: var(--faint); }
+.fm-svg .grid { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 4; }
+.fm-svg .grid.yr { stroke: var(--border-strong); stroke-dasharray: none; }
+.fm-svg .tick { font: 500 11px var(--font-mono); fill: var(--muted); text-anchor: middle; }
+.fm-svg .tick.yr { font-weight: 700; fill: var(--text); }
+.fm-svg .edge path { fill: none; stroke: var(--e); stroke-width: 1.4; opacity: .6; transition: opacity .2s ease, stroke-width .2s ease; }
+.fm-svg .edge.k-c path { stroke: var(--neutral); stroke-dasharray: 4 4; stroke-width: 1.2; opacity: .5; }
+.fm-svg .node { cursor: pointer; transition: opacity .2s ease; }
+.fm-svg .node:focus { outline: none; }
+.fm-svg a.node { text-decoration: none; }
+.fm-svg .paper rect { fill: var(--surface); stroke: var(--text); stroke-width: 1.4; }
+.fm-svg .paper .lab { font: 600 13px var(--font-body); fill: var(--text); }
+.fm-svg .paper .num { font: 600 10.5px var(--font-mono); fill: var(--faint); }
+.fm-svg .prior rect { fill: var(--frozen-fill); stroke: var(--border-strong); stroke-width: 1; }
+.fm-svg .prior .lab { font: 500 11px var(--font-mono); fill: var(--muted); }
+.fm-svg .prior .dot { fill: var(--e); }
+.fm-svg .node:hover rect, .fm-svg .node:focus-visible rect { stroke: var(--accent); stroke-width: 2.2; }
+.fm-svg.hide-b .edge.k-b { display: none; }
+.fm-svg:not(.show-c) .edge.k-c:not(.on) { display: none; }
+.fm-svg.has-focus .node:not(.on), .fm-svg.has-focus .edge:not(.on) { opacity: .16; }
+.fm-svg.has-focus .edge.on path { opacity: 1; stroke-width: 2.2; }
+.fm-svg.has-focus .edge.k-c.on path { stroke: var(--accent); stroke-width: 1.8; }
+.fm-svg .node.sel rect { stroke: var(--accent); stroke-width: 2.6; fill: var(--accent-tint); }
+.fm-info { min-height: 5.6rem; margin-top: .7rem; padding: .7rem .9rem; border-radius: var(--r); background: var(--surface-2); font-size: .92rem; line-height: 1.5; }
+.fm-info p { margin: 0 0 .3rem; }
+.fm-info p:last-child { margin-bottom: 0; }
+.fm-info .rel { color: var(--muted); font-size: .86rem; }
+.fm-info .hd { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem .6rem; }
+.fm-info .hd b { font-family: var(--font-display); font-size: 1.05rem; }
+.ix-key-line { display: inline-block; width: 30px; height: 0; border-top: 2px solid var(--neutral); vertical-align: middle; }
+.ix-key-line.c { border-top-style: dashed; }
+.ix-key-box { display: inline-block; width: 22px; height: 12px; border-radius: 6px; border: 1.4px solid var(--text); background: var(--surface); vertical-align: middle; }
+.ix-key-box.prior { border: 1px solid var(--border-strong); background: var(--frozen-fill); border-radius: 4px; }
+
+/* cards */
+.ix-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin: 1rem 0 0; }
+@media (max-width: 1060px) { .ix-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 660px) { .ix-cards { grid-template-columns: 1fr; } }
+.ix-card { display: flex; flex-direction: column; gap: .45rem; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: .95rem 1.05rem 1rem; min-width: 0; }
+.ix-card:hover { border-color: var(--border-strong); }
+.ix-top { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .5rem; font-size: .8rem; color: var(--muted); }
+.ix-num { font: 600 .72rem/1 var(--font-mono); color: var(--surface); background: var(--text); border-radius: 999px; min-width: 1.4rem; height: 1.4rem; display: inline-flex; align-items: center; justify-content: center; padding: 0 .3rem; }
+.ix-card h3 { margin: .1rem 0 0; font-size: 1.3rem; }
+.ix-card h3 a { color: var(--text); text-decoration: none; }
+.ix-card h3 a:hover { text-decoration: underline; }
+.ix-title { font-size: .86rem; color: var(--muted); line-height: 1.4; margin: 0; }
+.ix-auth { font-size: .8rem; color: var(--faint); margin: -.3rem 0 0; }
+.ix-one { font-size: .9rem; line-height: 1.45; margin: 0; }
+.ix-dl { margin: .1rem 0 0; display: grid; gap: .35rem; font-size: .84rem; line-height: 1.42; }
+.ix-dl dt { font: 600 .68rem/1.3 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.ix-dl dd { margin: 0; }
+.ix-code { display: inline-block; font: 600 .7rem/1.3 var(--font-mono); letter-spacing: .03em; padding: .05rem .4rem; border-radius: 4px; border: 1px solid var(--border-strong); margin-right: .3rem; white-space: nowrap; }
+.ix-code.full { border-color: var(--good); color: var(--good); }
+.ix-code.part { border-color: var(--warn); color: var(--warn); background: var(--warn-tint); }
+.ix-code.none { color: var(--faint); border-style: dashed; }
+.ix-open { margin-top: auto; padding-top: .35rem; font-size: .88rem; font-weight: 500; }
+
+/* comparison and benchmark tables */
+.ix-filter { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin: .4rem 0 .2rem; }
+.ix-count { font: 500 .8rem/1.3 var(--font-mono); color: var(--muted); margin-left: .3rem; }
+table.ix-cmp td { white-space: normal; vertical-align: top; line-height: 1.38; font-size: .82rem; min-width: 10.5rem; }
+table.ix-cmp td.s { min-width: 6.5rem; }
+table.ix-cmp td.l { min-width: 14.5rem; }
+table.ix-cmp thead th.txt, table.ix-bench thead th.txt { text-align: left; }
+table.ix-cmp th[scope="row"], table.ix-bench th[scope="row"] { position: sticky; left: 0; z-index: 1; background: var(--surface); vertical-align: top; }
+table.ix-cmp thead th:first-child, table.ix-bench thead tr:last-child th:first-child { position: sticky; left: 0; z-index: 2; }
+table.ix-cmp th[scope="row"] small, table.ix-bench th[scope="row"] small { display: block; font: 500 .7rem/1.3 var(--font-mono); color: var(--faint); }
+table.ix-bench td.src { white-space: normal; min-width: 8rem; font-size: .78rem; color: var(--muted); }
+table.ix-bench td.na { color: var(--faint); text-align: center; }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="layout">
+<header class="ph">
+  <!-- FILL: a real name for the collection (2-4 words, not "Index"), the same in <title>. Counts must match the JSON. -->
+  <div class="ph-kicker">
+    <span class="chip cat">reading guide</span>
+    <span>5 papers</span><span aria-hidden="true">·</span><span>first versions Mar 2023 – Apr 2026</span>
+  </div>
+  <h1>Five Placeholder Papers</h1>
+  <p class="ph-title">One line on what the collection is about</p>
+  <p class="ix-lede">One short paragraph on what the papers have in common and how they differ. Here: four methods turn the same kind of input into the same kind of output, first by per-input optimization (Method A, Method B), then with feed-forward networks on a frozen pretrained encoder (Method C, Method D). The fifth paper, Method E, is a benchmark that tests three of them.</p>
+  <p class="ix-how">Every paper page has the same five parts: the idea as a storyboard, a clickable architecture diagram, details beyond the figures, experiments, and a critical analysis. Grey chips such as <span class="ev">Tab.3</span> or <span class="ev code">model.py:120</span> point to the source, an amber <span class="ne">≠</span> marks a place where the released code differs from the paper, and <span class="spec">speculation</span> marks our own inference. Numbers are copied from each paper's own tables.</p>
+  <dl class="glance">
+    <div><dt>Papers</dt><dd>5: four methods, one benchmark.</dd></div>
+    <div><dt>Span</dt><dd>Mar 2023 (Method A) to Apr 2026 (Method E), by first public version.</dd></div>
+    <div><dt>Code</dt><dd>2 full code, 1 partial, 2 no code.</dd></div>
+    <div><dt>Most shared benchmark</dt><dd>Benchmark P (4 papers), then Benchmark Q (3).</dd></div>
+  </dl>
+</header>
+
+<nav class="toc" aria-label="Contents"><details open><summary>Contents</summary><ol>
+  <li><a href="#map"><span class="toc-num">1</span>Family map</a></li>
+  <li><a href="#papers"><span class="toc-num">2</span>The papers</a></li>
+  <li><a href="#compare"><span class="toc-num">3</span>Side by side</a></li>
+  <li><a href="#benchmarks"><span class="toc-num">4</span>Shared benchmarks</a></li>
+  <li><a href="#patterns"><span class="toc-num">5</span>Patterns</a></li>
+</ol></details></nav>
+
+<main id="main">
+
+<!-- ═════════════ 1. FAMILY MAP (drawn from #collection; edit the JSON, not the SVG) ═════════════ -->
+<section id="map">
+  <!-- FILL: the heading is the one claim the map shows (e.g. two waves, a shared backbone). -->
+  <h2>Optimization first, then feed-forward models on a shared frozen encoder</h2>
+  <p>Each paper sits at the month of its first public version, in the lane of its category. Grey nodes are earlier systems the papers build on. Point at a paper (or tap it) to light up what it builds on, what builds on it, and which papers it is compared with; click it to open its page.</p>
+  <figure class="panel wide" aria-label="Family map of the papers">
+    <div class="fm-bar" role="group" aria-label="Edges to show">
+      <span class="lbl">Show</span>
+      <button type="button" class="btn" id="fm-tg-b" aria-pressed="true"><span class="ix-key-line" aria-hidden="true"></span>Builds on</button>
+      <button type="button" class="btn" id="fm-tg-c" aria-pressed="false"><span class="ix-key-line c" aria-hidden="true"></span>Compared against</button>
+    </div>
+    <div class="fm-scroll">
+      <svg class="fm-svg" id="fm-svg" viewBox="0 0 1150 300" role="group" aria-label="Papers by time and category, with earlier systems and edges">
+        <title>Family map: the papers placed by month and category, linked to earlier systems they build on and to the papers they compare against</title>
+      </svg>
+    </div>
+    <p class="fm-hint">Scroll sideways to see the whole map.</p>
+    <div class="fm-info" id="fm-info" aria-live="polite"></div>
+    <div class="legend" id="fm-legend">
+      <span class="lg"><span class="ix-key-box" aria-hidden="true"></span>paper in this guide (number = reading order)</span>
+      <span class="lg"><span class="ix-key-box prior" aria-hidden="true"></span>earlier system</span>
+      <span class="lg" id="fm-lg-b"><span class="ix-key-line" aria-hidden="true"></span>builds on</span>
+      <span class="lg"><span class="ix-key-line c" aria-hidden="true"></span>reports the other paper as a baseline</span>
+    </div>
+    <!-- FILL: say what x means (and any date caveat), that earlier systems are placed for readability, and what each edge style means. -->
+    <figcaption>Horizontal position: month of the first public version. Earlier systems are placed near the papers that use them, not by date. A solid edge means the earlier system or paper is in the paper's builds-on list in our notes on the paper. A dashed edge means the paper prints the other paper's numbers in its own tables; dashed edges appear when you point at a paper, or all at once with the "Compared against" button.</figcaption>
+  </figure>
+</section>
+
+<!-- ═════════════ 2. CARDS (generated from #collection) ═════════════ -->
+<section id="papers">
+  <!-- FILL: say why this reading order. -->
+  <h2>The five papers, in reading order</h2>
+  <p>The order follows the family map: the optimization methods first, then the feed-forward models, and the benchmark last. Each page links to the next one.</p>
+  <div class="ix-cards wide" id="ix-cards"></div>
+</section>
+
+<!-- ═════════════ 3. COMPARISON TABLE (generated from #collection; site.js sorts it) ═════════════ -->
+<section id="compare">
+  <!-- FILL: the heading states what the table shows at a glance. -->
+  <h2>Side by side: only the feed-forward methods run online, and two of five release no code</h2>
+  <p>One row per paper, from our notes on each paper. Filter by category with the buttons. On a phone the table scrolls sideways inside its box and the method column stays in place.</p>
+  <div class="ix-filter wide" id="ix-filter" role="group" aria-label="Filter rows by category"></div>
+  <div class="tbl-wrap wide">
+    <table class="data ix-cmp" id="ix-cmp" data-sortable></table>
+  </div>
+  <p class="tbl-note" id="ix-sortnote"></p>
+</section>
+
+<!-- ═════════════ 4. SHARED BENCHMARKS (hand-written) ═════════════ -->
+<section id="benchmarks">
+  <h2>Shared benchmarks: each paper's own numbers, which do not form a leaderboard</h2>
+  <p>Where several papers evaluate on the same benchmark, the table lists the number each paper prints for <em>itself</em>, with the table it comes from. Empty cells mean the paper does not report that benchmark.</p>
+  <!-- FILL: name the concrete protocol differences (frame rate, split, input given, alignment, training on the test domain)
+       and any baseline that appears with different numbers in different papers. Keep this box: it is the caveat. -->
+  <div class="callout ne-box wide"><p class="callout-title">Not a leaderboard: protocols differ, so read rows as claims</p>
+    <p>The same metric name hides different protocols. Method A optimizes on each test sequence (test-time optimization), Method C trains on the training split of Benchmark Q, and Method D is given ground-truth camera intrinsics that the others estimate. Method B evaluates Benchmark P on a subset of 20 sequences. Baselines drift too: Method A appears as 41.2 in its own paper and as 43.0 in Method D's table <span class="ev">Method A Tab.2, Method D Tab.2</span>.</p></div>
+  <div class="tbl-wrap wide">
+    <!-- One row per paper that reports at least one shared benchmark. Super-header: blank cells via colspan, never rowspan.
+         data-flag = the caveat for that row (amber triangle). Numbers exactly as printed; "–" when not reported. -->
+    <table class="data ix-bench" data-sortable>
+      <thead>
+        <tr class="super"><th colspan="1"></th><th colspan="2">Benchmark P</th><th colspan="1">Benchmark Q</th><th colspan="1"></th></tr>
+        <tr>
+          <th scope="col" class="num txt">Method</th>
+          <th scope="col" class="num"><span data-term="Error">Error</span> ↓</th>
+          <th scope="col" class="num"><span data-term="Score">Score</span> ↑</th>
+          <th scope="col" class="num"><span data-term="Error">Error</span> ↓</th>
+          <th scope="col">Source</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr data-flag="Test-time optimization on every test sequence (about 2 min per 100 frames).">
+          <th scope="row" data-v="1"><a href="author2023.html">Method A</a><small>2023</small></th>
+          <td class="num">41.2</td><td class="num">0.71</td><td class="na">–</td>
+          <td class="src">Tab.2</td>
+        </tr>
+        <tr data-flag="Benchmark P on a subset of 20 sequences.">
+          <th scope="row" data-v="2"><a href="author2024.html">Method B</a><small>2024</small></th>
+          <td class="num">38.5</td><td class="num">0.74</td><td class="num">22.0</td>
+          <td class="src">Tab.1</td>
+        </tr>
+        <tr data-flag="Trained on the training split of Benchmark Q.">
+          <th scope="row" data-v="3"><a href="author2025.html">Method C</a><small>2025</small></th>
+          <td class="num">44.9</td><td class="num">0.69</td><td class="num">19.6</td>
+          <td class="src">Tab.1, Tab.4</td>
+        </tr>
+        <tr data-flag="Given ground-truth camera intrinsics.">
+          <th scope="row" data-v="4"><a href="author2025b.html">Method D</a><small>2025</small></th>
+          <td class="num">36.1</td><td class="num">0.77</td><td class="num">18.2</td>
+          <td class="src">Tab.2</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="tbl-note"><span class="flag" aria-hidden="true"></span>marks the caveat behind each row; hover or tap it. Click a numeric header to sort; a third click restores the reading order. Method E is not listed: it is a benchmark, and its numbers measure its own reference data, not a method.</p>
+</section>
+
+<!-- ═════════════ 5. PATTERNS (hand-written) ═════════════ -->
+<section id="patterns">
+  <!-- FILL: 4-6 bullets a researcher would want, each grounded in the pages' critical analyses, naming the papers and tables behind every number. -->
+  <h2>Patterns: the frozen encoder carries most of the gain, and the code often differs from the paper</h2>
+  <p>Each point combines the critical analyses of several pages. The chips name the paper and the table behind each number.</p>
+  <ul class="keylist">
+    <li><span class="k">One component carries most of the gain.</span> Removing the frozen encoder raises Method C's Benchmark Q error from 19.6 to 31.4 <span class="ev">Method C Tab.5</span>, and Method D loses 6.0 of its 8.8-point gain over Method B without it <span class="ev">Method D Tab.4</span>. The other additions change the error by less than 1.</li>
+    <li><span class="k">Most priors stay frozen.</span> Methods C and D keep Encoder W frozen and train only a small head (38 M and 120 M parameters); Method D's fine-tuning ablation is worse on both benchmarks <span class="ev">Method D Tab.6</span>.</li>
+    <li><span class="k">Released code differs from the paper.</span> Method B's released code skips the refinement stage the paper describes, and Method C's loss weights differ from the paper's table <span class="ev code">train.py:88</span>.</li>
+    <li><span class="k">The benchmark changes the ranking.</span> On Method E's data, Method A beats both feed-forward methods <span class="ev">Method E Tab.4</span>, the opposite of their own papers.</li>
+  </ul>
+</section>
+
+</main>
+</div>
+
+<footer class="pager">
+  <span></span>
+  <!-- FILL: the first paper in reading order. -->
+  <a href="author2023.html" style="text-align:right"><small>Start reading →</small>1 · Method A</a>
+</footer>
+
+<!-- FILL: one entry per data-term used on this page that site.js does not already define. -->
+<script type="application/json" id="glossary">{
+  "Error": "Placeholder metric: mean error on the benchmark, in its own unit. Lower is better.",
+  "Score": "Placeholder metric: fraction of test cases solved, from 0 to 1. Higher is better."
+}</script>
+
+<!-- ═════════════ COLLECTION DATA: one block drives the family map, the cards and the comparison table ═════════════
+  Strict JSON: no comments, no trailing commas. slug, method, category, lane names, prior name/role, column keys are
+  plain text; every other string is HTML (write &lt; for "<", evidence chips as <span class=\"ev\">Tab.2</span>).
+  lanes     ["category", ...]  map lanes from top to bottom; also the filter buttons and the Category sort order.
+            Every paper's category must be one of them.
+  entities  {"scene": "backbones", ...}  optional legend names for the line colors that priors use.
+            Slots: human, scene, camera, contact, robot, neutral (site.css colors).
+  columns   [{"key", "label", "size"?, "sort"?}]  comparison-table columns between Category and Code. key = a paper field.
+            size "s" (narrow) or "l" (wide). sort "number" = by the first number in the cell (keep one unit per column);
+            sort ["no", "partial", "yes"] = by which entry the cell text starts with (unmatched cells sort last).
+  priors    [{"name", "role", "entity"?, "band"?}]  earlier systems the papers build on (small grey nodes). entity sets
+            the line color (default neutral); band "top" | "bottom" overrides the automatic choice.
+  papers    in reading order (= the numbers on map and cards, and the prev/next order of the pages). Each is the
+            digest's comparison record: slug, method, title, authors_short, year, venue, category, input, output,
+            backbone, builds_on, training_data, runtime, code_url, headline_result, one_liner, plus:
+    date              "YYYY-MM" of the first public version; sets x on the map (without it: mid-year of "year";
+                      any other format warns and falls back the same way).
+    code_url          a bare https URL, or "". Anything else warns and gets no link; remarks go in code_note.
+    builds_on        names of priors, or slugs / method names of papers here. Anything else warns in the console:
+                      add it to priors or drop it.
+    compares_against  slugs / method names of papers here whose numbers this paper prints as baselines.
+    code_status       "full" | "partial" | "none";  code_note: short text after the code chip on the card.
+    other keys        free fields for "columns" (here: params, online).
+  Required per paper: slug, method, title, year, category, one_liner, code_status. A field that is "", null, absent
+  or "not stated" (any case) counts as missing; missing optional fields show "not stated".
+-->
+<script type="application/json" id="collection">{
+  "lanes": ["optimization", "feed-forward", "benchmark"],
+  "entities": { "scene": "backbones and encoders", "human": "detectors", "camera": "solvers" },
+  "columns": [
+    { "key": "input", "label": "Input", "size": "l" },
+    { "key": "output", "label": "Output", "size": "l" },
+    { "key": "backbone", "label": "Backbone" },
+    { "key": "training_data", "label": "Training data" },
+    { "key": "params", "label": "Trained parameters", "size": "s", "sort": "number" },
+    { "key": "online", "label": "Online", "size": "s", "sort": ["no", "partial", "yes"] },
+    { "key": "runtime", "label": "Runtime" }
+  ],
+  "priors": [
+    { "name": "Backbone X", "role": "pretrained image backbone", "entity": "scene" },
+    { "name": "Detector Y", "role": "off-the-shelf object detector", "entity": "human" },
+    { "name": "Solver Z", "role": "classical least-squares solver", "entity": "camera" },
+    { "name": "Encoder W", "role": "pretrained video encoder", "entity": "scene" }
+  ],
+  "papers": [
+    {
+      "slug": "author2023", "method": "Method A", "title": "A Placeholder Title for a Test-Time Optimization Method",
+      "authors_short": "First Author et al.", "year": 2023, "date": "2023-03", "venue": "Venue 2023", "category": "optimization",
+      "input": "One video, unknown camera intrinsics; needs detector boxes per frame",
+      "output": "Per-frame estimates in one shared world frame",
+      "backbone": "Frozen Backbone X features", "training_data": "None (test-time optimization)",
+      "runtime": "≈2 min per 100 frames (one GPU)", "params": "0", "online": "no",
+      "builds_on": ["Backbone X", "Detector Y"], "compares_against": [],
+      "code_url": "https://example.com/method-a", "code_status": "full", "code_note": "optimization and evaluation scripts.",
+      "headline_result": "Benchmark P error 41.2 vs 48.0 for the best baseline <span class=\"ev\">Tab.2</span>.",
+      "one_liner": "Optimizes all frames of one video jointly, with Backbone X features as the data term and Detector Y boxes as anchors."
+    },
+    {
+      "slug": "author2024", "method": "Method B", "title": "A Placeholder Title for a Faster Optimization Method",
+      "authors_short": "First Author et al.", "year": 2024, "date": "2024-02", "venue": "Venue 2024", "category": "optimization",
+      "input": "One video and Method A's initialization",
+      "output": "Refined per-frame estimates and a confidence per frame",
+      "backbone": "Frozen Backbone X features", "training_data": "None (test-time optimization)",
+      "runtime": "≈2 s per frame (one GPU)", "params": "0", "online": "no",
+      "builds_on": ["Method A", "Backbone X", "Solver Z"], "compares_against": ["Method A"],
+      "code_url": "https://example.com/method-b", "code_status": "partial", "code_note": "inference only; the refinement stage is missing.",
+      "headline_result": "Benchmark P error 38.5 vs 41.2 for Method A; Benchmark Q error 22.0 <span class=\"ev\">Tab.1</span>.",
+      "one_liner": "Replaces Method A's gradient steps with Solver Z, which converges in a few iterations, and adds a per-frame confidence."
+    },
+    {
+      "slug": "author2025", "method": "Method C", "title": "A Placeholder Title for a Feed-Forward Model",
+      "authors_short": "First Author et al.", "year": 2025, "date": "2025-01", "venue": "Venue 2025", "category": "feed-forward",
+      "input": "Video stream, one frame at a time; no intrinsics needed",
+      "output": "Per-frame estimates and a running world model",
+      "backbone": "Backbone X + frozen Encoder W; trained fusion head", "training_data": "Two synthetic sets and the training split of Benchmark Q",
+      "runtime": "25 FPS (one GPU)", "params": "38 M", "online": "yes",
+      "builds_on": ["Backbone X", "Encoder W"], "compares_against": ["Method A", "Method B"],
+      "code_url": "https://example.com/method-c", "code_status": "full", "code_note": "training, inference and evaluation.",
+      "headline_result": "Benchmark Q error 19.6 at 25 FPS, against 22.0 for Method B at 0.5 FPS <span class=\"ev\">Tab.1</span> <span class=\"ev\">Tab.4</span>.",
+      "one_liner": "Trains a small fusion head on top of frozen Encoder W, so one forward pass per frame replaces per-video optimization."
+    },
+    {
+      "slug": "author2025b", "method": "Method D", "title": "A Placeholder Title for a Larger Feed-Forward Model",
+      "authors_short": "First Author et al.", "year": 2025, "date": "2025-03", "venue": "preprint", "category": "feed-forward",
+      "input": "Video in windows of 64 frames; ground-truth intrinsics at test time",
+      "output": "Per-frame estimates with object identities",
+      "backbone": "Method C's head on frozen Encoder W, plus Detector Y", "training_data": "Not stated",
+      "runtime": "Not stated", "params": "120 M", "online": "partial (64-frame windows)",
+      "builds_on": ["Method C", "Encoder W", "Detector Y"], "compares_against": ["Method B", "Method C"],
+      "code_url": "", "code_status": "none", "code_note": "project page only.",
+      "headline_result": "Benchmark P error 36.1 and score 0.77, best in its table <span class=\"ev\">Tab.2</span>.",
+      "one_liner": "Extends Method C with Detector Y identities and a window-level attention layer, trading online use for accuracy."
+    },
+    {
+      "slug": "author2026", "method": "Method E", "title": "A Placeholder Title for a Benchmark",
+      "authors_short": "First Author et al.", "year": 2026, "date": "2026-04", "venue": "preprint", "category": "benchmark",
+      "input": "Recorded sequences with reference measurements from a lab system",
+      "output": "40 test sequences with reference data and an evaluation protocol",
+      "backbone": "None (Encoder W used only to align the recordings)", "training_data": "n/a",
+      "runtime": "n/a", "params": "n/a", "online": "n/a",
+      "builds_on": ["Encoder W"], "compares_against": ["Method A", "Method C", "Method D"],
+      "code_url": "", "code_status": "none", "code_note": "data released under a research licence.",
+      "headline_result": "Reference error of its own recordings 1.8 against the lab system <span class=\"ev\">Tab.3</span>; evaluates Methods A, C and D <span class=\"ev\">Tab.4</span>.",
+      "one_liner": "Records 40 sequences with a lab reference system and re-evaluates three methods under one protocol."
+    }
+  ]
+}</script>
+
+<script>
+/* Index builder (page-local). Reads #collection and builds the cards, the comparison table (with its filter buttons
+   and sort note) and the family map. It runs before the deferred site.js, so site.js makes the generated table
+   sortable and attaches tooltips. Data problems (unknown references, missing fields) and map faults (overlapping
+   nodes, an edge through a node) go to console.warn, so the console check catches them. */
+(function () {
+  'use strict';
+  var SLOTS = ['human', 'scene', 'camera', 'contact', 'robot', 'neutral'];
+  var CODE = { none: [0, 'no code', 'none'], partial: [1, 'partial code', 'part'], full: [2, 'full code', 'full'] };
+  var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function warn(msg) { console.warn('[index] ' + msg); }
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function missing(v) { return v === undefined || v === null || (typeof v === 'string' && /^\s*(not stated)?\s*$/i.test(v)); }
+  function html(v) { return missing(v) ? '<span class="tag">not stated</span>' : Array.isArray(v) ? v.join(', ') : String(v); }
+  function plain(s) { var d = document.createElement('div'); d.innerHTML = s; return d.textContent; }
+  function avg(list) { return list.reduce(function (a, b) { return a + b; }, 0) / list.length; }
+
+  var D;
+  try { D = JSON.parse(document.getElementById('collection').textContent); }
+  catch (err) { console.error('[index] invalid #collection JSON: ' + err.message); return; }
+  var lanes = D.lanes || [], papers = D.papers || [], priors = D.priors || [], columns = D.columns || [], names = D.entities || {};
+
+  /* ── validate and index ── */
+  var bySlug = {}, byMethod = {}, byPrior = {};
+  papers.forEach(function (p, i) {
+    p.n = i + 1;
+    ['slug', 'method', 'title', 'year', 'category', 'one_liner', 'code_status'].forEach(function (k) {
+      if (missing(p[k])) warn('paper ' + (p.slug || p.n) + ': missing "' + k + '"');
+    });
+    if (bySlug[p.slug]) warn('duplicate slug ' + p.slug);
+    bySlug[p.slug] = p; byMethod[p.method] = p;
+    p.lane = lanes.indexOf(p.category);
+    if (p.lane < 0) warn('paper ' + p.slug + ': category "' + p.category + '" is not one of the lanes');
+    if (!missing(p.code_status) && !CODE[p.code_status]) warn('paper ' + p.slug + ': code_status must be full, partial or none');
+    var d = missing(p.date) ? null : /^(\d{4})-(\d{2})$/.exec(p.date);
+    if (d && (+d[2] < 1 || +d[2] > 12)) d = null;
+    if (!missing(p.date) && !d) warn('paper ' + p.slug + ': date "' + p.date + '" must look like "2025-07"');
+    p.codeHref = '';
+    if (/^https?:\/\/\S+$/.test(p.code_url)) p.codeHref = p.code_url;
+    else if (!missing(p.code_url)) warn('paper ' + p.slug + ': code_url "' + p.code_url + '" is not a bare http(s) URL, so it gets no link; put remarks in code_note');
+    p.mo = d ? +d[1] * 12 + (+d[2] - 1) + 0.5 : +p.year * 12 + 6;
+    p.when = d ? MON[+d[2] - 1] + ' ' + d[1] : String(p.year);
+  });
+  priors.forEach(function (q) {
+    if (q.entity && SLOTS.indexOf(q.entity) < 0) warn('prior ' + q.name + ': unknown entity "' + q.entity + '"');
+    if (q.band && q.band !== 'top' && q.band !== 'bottom') warn('prior ' + q.name + ': band must be top or bottom');
+    byPrior[q.name] = q;
+  });
+  Object.keys(names).forEach(function (k) { if (SLOTS.indexOf(k) < 0) warn('entities: unknown slot "' + k + '"'); });
+  columns.forEach(function (c) {
+    if (!papers.some(function (p) { return p[c.key] !== undefined; })) warn('column "' + c.key + '" is not a field of any paper');
+  });
+  var edges = [];
+  papers.forEach(function (p) {
+    (p.builds_on || []).forEach(function (r) {
+      var s = bySlug[r] || byMethod[r] || byPrior[r];
+      if (!s || s === p) { warn(p.slug + ': builds_on "' + r + '" is neither a prior nor another paper here (add it to priors or drop it)'); return; }
+      edges.push({ a: s, b: p, k: 'b' });
+    });
+    (p.compares_against || []).forEach(function (r) {
+      var s = bySlug[r] || byMethod[r];
+      if (!s || s === p) { warn(p.slug + ': compares_against "' + r + '" is not another paper here'); return; }
+      edges.push({ a: p, b: s, k: 'c' });
+    });
+  });
+  priors.forEach(function (q) {
+    if (!edges.some(function (e) { return e.a === q; })) warn('prior ' + q.name + ' is in no builds_on list');
+  });
+  function codeChip(p) {
+    var c = CODE[p.code_status];
+    return c ? '<span class="ix-code ' + c[2] + '">' + c[1] + '</span>' : '<span class="tag">not stated</span>';
+  }
+
+  /* ── cards ── */
+  var cards = document.getElementById('ix-cards');
+  if (cards) cards.innerHTML = papers.map(function (p) {
+    var page = esc(p.slug) + '.html';
+    return '<article class="ix-card" id="card-' + esc(p.slug) + '" data-cat="' + esc(p.category) + '">' +
+      '<div class="ix-top"><span class="ix-num">' + p.n + '</span><span class="chip cat">' + esc(p.category) + '</span><span>' + html(p.venue) + '</span></div>' +
+      '<h3><a href="' + page + '">' + esc(p.method) + '</a></h3>' +
+      '<p class="ix-title">' + html(p.title) + '</p>' +
+      (missing(p.authors_short) ? '' : '<p class="ix-auth">' + p.authors_short + '</p>') +
+      '<p class="ix-one">' + html(p.one_liner) + '</p>' +
+      '<dl class="ix-dl">' +
+      '<div><dt>In → out</dt><dd>' + html(p.input) + ' → ' + html(p.output) + '</dd></div>' +
+      '<div><dt>Headline</dt><dd>' + html(p.headline_result) + '</dd></div>' +
+      '<div><dt>Code</dt><dd>' + codeChip(p) + (missing(p.code_note) ? '' : p.code_note) +
+      (p.codeHref ? ' <a href="' + esc(p.codeHref) + '">Repository</a>' : '') + '</dd></div>' +
+      '</dl><a class="ix-open" href="' + page + '">Read the ' + esc(p.method) + ' page →</a></article>';
+  }).join('');
+
+  /* ── comparison table, filter buttons, sort note ── */
+  var table = document.getElementById('ix-cmp');
+  if (table) {
+    var head = '<thead><tr><th scope="col" class="num txt">Method</th><th scope="col" class="num txt">First version</th>' +
+      '<th scope="col" class="num txt">Category</th>' + columns.map(function (c) {
+        var cls = c.sort === 'number' ? ' class="num"' : Array.isArray(c.sort) ? ' class="num txt"' : '';
+        return '<th scope="col"' + cls + '>' + c.label + '</th>';
+      }).join('') + '<th scope="col" class="num txt">Code</th></tr></thead>';
+    var body = papers.map(function (p) {
+      var c = CODE[p.code_status], code = c ? (p.codeHref ? '<a href="' + esc(p.codeHref) + '">' + c[1] + '</a>' : c[1]) : html('');
+      return '<tr data-cat="' + esc(p.category) + '">' +
+        '<th scope="row" data-v="' + p.n + '"><a href="' + esc(p.slug) + '.html">' + esc(p.method) + '</a><small>' + p.n + ' · ' + esc(plain(html(p.venue))) + '</small></th>' +
+        '<td class="s" data-v="' + p.mo + '">' + p.when + '</td>' +
+        '<td class="s" data-v="' + (p.lane + 1) + '">' + esc(p.category) + '</td>' +
+        columns.map(function (col) {
+          var v = p[col.key], cls = (col.size || '') + (col.sort === 'number' ? ' num' : ''), dv = '';
+          if (Array.isArray(col.sort)) {
+            var t = missing(v) ? '' : plain(html(v)).trim().toLowerCase(), rank = '';
+            col.sort.forEach(function (o, j) {
+              o = String(o).toLowerCase();
+              if (rank === '' && t && t.slice(0, o.length) === o && !/\w/.test(t.charAt(o.length))) rank = j;
+            });
+            dv = ' data-v="' + rank + '"';
+          }
+          return '<td' + (cls.trim() ? ' class="' + cls.trim() + '"' : '') + dv + '>' + html(v) + '</td>';
+        }).join('') +
+        '<td class="s" data-v="' + (c ? c[0] : '') + '">' + code + '</td></tr>';
+    }).join('');
+    table.innerHTML = head + '<tbody>' + body + '</tbody>';
+  }
+  var fbox = document.getElementById('ix-filter');
+  if (fbox && table) {
+    fbox.innerHTML = '<button type="button" class="btn" data-filter="" aria-pressed="true">All</button>' +
+      lanes.filter(function (l) { return papers.some(function (p) { return p.category === l; }); }).map(function (l) {
+        return '<button type="button" class="btn" data-filter="' + esc(l) + '" aria-pressed="false">' + esc(l) + '</button>';
+      }).join('') + '<span class="ix-count" id="ix-count" aria-live="polite">' + papers.length + ' of ' + papers.length + ' rows</span>';
+    var btns = Array.prototype.slice.call(fbox.querySelectorAll('[data-filter]'));
+    btns.forEach(function (b) {
+      b.addEventListener('click', function () {
+        var f = b.getAttribute('data-filter'), rows = Array.prototype.slice.call(table.tBodies[0].rows), shown = 0;
+        btns.forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        rows.forEach(function (r) { r.hidden = !!f && r.getAttribute('data-cat') !== f; if (!r.hidden) shown++; });
+        document.getElementById('ix-count').textContent = shown + ' of ' + rows.length + ' rows';
+      });
+    });
+  }
+  var note = document.getElementById('ix-sortnote');
+  if (note) {
+    var orders = ['Method = reading order', 'Category = ' + lanes.join(', ')];
+    columns.forEach(function (c) { if (Array.isArray(c.sort)) orders.push(plain(c.label) + ' = ' + c.sort.join(', ')); });
+    orders.push('Code = no code, partial code, full code');
+    note.textContent = 'Click a header with arrows to sort. Text columns sort in this order: ' + orders.join('; ') +
+      '. Cells that match no entry sort last; a third click restores the reading order.';
+  }
+
+  try { buildMap(); } catch (err) { console.error('[index] family map failed: ' + (err && err.stack || err)); }
+
+  /* ── family map ──
+     Rows from top to bottom: earlier systems (top band), the lanes (a lane gets extra rows when papers would
+     overlap), the time axis, earlier systems (bottom band). Edges run in the gaps between rows ("channels") and
+     cross rows only where no node sits; lines in one channel get separate tracks unless they leave the same
+     source port. Hidden "compared against" lines keep their tracks, so showing them never moves anything. */
+  function buildMap() {
+    var NS = 'http://www.w3.org/2000/svg';
+    var svg = document.getElementById('fm-svg'), info = document.getElementById('fm-info');
+    if (!svg || !info) return;
+    var W = 1150, PH = 26, QH = 20, ROW_P = 32, ROW_Q = 24, ROW_AX = 20;
+    var TS = 5, CPAD = 9, R = 7, PADX = 7, GAP = 14, GAPQ = 10, HB = 30;
+    var mp = papers.filter(function (p) { return p.lane >= 0; });
+    if (!mp.length) { warn('map: no paper has a valid category'); return; }
+    var nodes = mp.concat(priors);
+    var live = edges.filter(function (e) { return nodes.indexOf(e.a) >= 0 && nodes.indexOf(e.b) >= 0; });
+    live.forEach(function (e, i) { e.key = i; });
+    function label(n) { return n.kind === 'paper' ? n.method : n.name; }
+    function el(tag, attrs, parent) {
+      var e = document.createElementNS(NS, tag);
+      if (attrs) Object.keys(attrs).forEach(function (k) { e.setAttribute(k, attrs[k]); });
+      if (parent) parent.appendChild(e);
+      return e;
+    }
+    function measure(text, cls) {
+      var t = el('text', { class: cls, x: -999, y: -999 }, svg);
+      t.textContent = text;
+      var w = t.getComputedTextLength();
+      svg.removeChild(t);
+      return w;
+    }
+
+    var defs = el('defs', {}, svg);
+    SLOTS.forEach(function (c) {
+      var m = el('marker', { id: 'fm-ah-' + c, viewBox: '0 0 8 8', refX: 7.4, refY: 4, markerWidth: 7, markerHeight: 7, orient: 'auto', markerUnits: 'userSpaceOnUse' }, defs);
+      el('path', { d: 'M0,0.6 L8,4 L0,7.4 z', style: 'fill: var(--' + c + ')' }, m);
+    });
+    var gStatic = el('g', { 'aria-hidden': 'true' }, svg), gEdges = el('g', {}, svg), gNodes = el('g', {}, svg);
+    mp.forEach(function (p) {
+      p.kind = 'paper'; p.id = p.slug; p.h = PH;
+      p.g = el('a', { href: p.slug + '.html', class: 'node paper', 'data-id': p.id, 'aria-label': p.n + ', ' + p.method + ': open its page' }, gNodes);
+      p.rect = el('rect', { rx: 13, ry: 13, height: PH }, p.g);
+      p.tNum = el('text', { class: 'num' }, p.g); p.tNum.textContent = p.n;
+      p.tLab = el('text', { class: 'lab' }, p.g); p.tLab.textContent = p.method;
+    });
+    priors.forEach(function (q) {
+      q.kind = 'prior'; q.id = 'prior:' + q.name; q.h = QH; q.e = SLOTS.indexOf(q.entity) >= 0 ? q.entity : 'neutral';
+      q.g = el('g', { class: 'node prior e-' + q.e, 'data-id': q.id, tabindex: 0, role: 'button', 'aria-label': q.name + ', earlier system: show what builds on it' }, gNodes);
+      q.rect = el('rect', { rx: 4, ry: 4, height: QH }, q.g);
+      q.dot = el('circle', { class: 'dot', r: 3.2 }, q.g);
+      q.tLab = el('text', { class: 'lab' }, q.g); q.tLab.textContent = q.name;
+    });
+    live.forEach(function (e) {
+      var col = e.k === 'c' ? 'neutral' : (e.a.kind === 'prior' ? e.a.e : 'neutral');
+      e.g = el('g', { class: 'edge k-' + e.k + ' e-' + col }, gEdges);
+      e.path = el('path', e.k === 'b' ? { 'marker-end': 'url(#fm-ah-' + col + ')' } : {}, e.g);
+    });
+
+    var L = 0;   /* left edge of the plot; lane labels sit left of it */
+    function layout() {
+      /* node sizes */
+      mp.forEach(function (p) {
+        p.wn = p.tNum.getComputedTextLength();
+        p.w = Math.round(9 + p.wn + 5 + p.tLab.getComputedTextLength() + 11);
+      });
+      priors.forEach(function (q) { q.w = Math.round(8 + 6.4 + 5 + q.tLab.getComputedTextLength() + 8); });
+
+      /* lane labels (two lines when long) set the left margin */
+      var labs = lanes.map(function (l) {
+        var up = l.toUpperCase(), best = -1;
+        if (measure(up, 'lane-lab') <= 150) return [up];
+        for (var i = 0; i < up.length; i++) if (up[i] === ' ' && (best < 0 || Math.abs(i - up.length / 2) < Math.abs(best - up.length / 2))) best = i;
+        return best > 0 ? [up.slice(0, best), up.slice(best + 1)] : [up];
+      });
+      L = 24 + Math.max(72, Math.max.apply(null, [].concat.apply([], labs).map(function (s) { return measure(s, 'lane-lab') + 6; })));
+
+      /* x = date */
+      var m0 = Math.min.apply(null, mp.map(function (p) { return p.mo; })), m1 = Math.max.apply(null, mp.map(function (p) { return p.mo; }));
+      var half = Math.max.apply(null, mp.map(function (p) { return p.w / 2; })) + 8;
+      var spread = m1 - m0 >= 1, k = spread ? (W - half - (L + half)) / (m1 - m0) : 60;
+      var xs = spread ? L + half : (L + W) / 2;
+      function xOf(m) { return xs + (m - m0) * k; }
+      mp.forEach(function (p) { p.cx = Math.round(xOf(p.mo)); });
+
+      /* extra rows inside a lane where papers would overlap */
+      var laneRows = lanes.map(function () { return []; });
+      mp.slice().sort(function (a, b) { return a.cx - b.cx || a.n - b.n; }).forEach(function (p) {
+        var rows = laneRows[p.lane], r = rows.filter(function (row) { return row.end + GAP <= p.cx - p.w / 2; })[0];
+        if (!r) { r = { nodes: [], end: -1e9 }; rows.push(r); }
+        r.nodes.push(p); r.end = p.cx + p.w / 2;
+      });
+
+      /* earlier systems: band near the lanes of the papers that use them, x near those papers */
+      var midL = (lanes.length - 1) / 2, cnt = { top: 0, bottom: 0 }, bands = { top: [], bottom: [] };
+      priors.forEach(function (q) {
+        var t = live.filter(function (e) { return e.a === q; }).map(function (e) { return e.b; });
+        q.want = t.length ? avg(t.map(function (p) { return p.cx; })) : (L + W) / 2;
+        var bd = q.band;
+        if (bd !== 'top' && bd !== 'bottom') {
+          var al = t.length ? avg(t.map(function (p) { return p.lane; })) : midL;
+          bd = al < midL ? 'top' : al > midL ? 'bottom' : cnt.top <= cnt.bottom ? 'top' : 'bottom';
+        }
+        cnt[bd]++; bands[bd].push(q);
+      });
+      function fit(row) {
+        var prev = L + 4 - GAPQ, next = W - 4 + GAPQ, i, q;
+        row.forEach(function (q) { q.cx = Math.max(q.want, prev + GAPQ + q.w / 2); prev = q.cx + q.w / 2; });
+        for (i = row.length - 1; i >= 0; i--) { q = row[i]; q.cx = Math.min(q.cx, next - GAPQ - q.w / 2); next = q.cx - q.w / 2; }
+        return !row.length || row[0].cx - row[0].w / 2 >= L + 3.5;
+      }
+      function pack(list) {
+        list.sort(function (a, b) { return a.want - b.want; });
+        for (var nr = 1; ; nr++) {
+          var rows = [];
+          for (var i = 0; i < nr; i++) rows.push([]);
+          list.forEach(function (q, j) { rows[j % nr].push(q); });
+          if (rows.every(fit) || nr >= list.length) return rows.filter(function (r) { return r.length; });
+        }
+      }
+
+      /* time axis ticks */
+      var step = [1, 2, 3, 6, 12, 24, 60].filter(function (s) { return s * k >= 58; })[0] || 60;
+      var mL = m0 + (L + 16 - xs) / k, mR = m0 + (W - 16 - xs) / k, ticks = [];
+      for (var m = Math.ceil(mL / step) * step; m <= mR; m += step) {
+        var yr = Math.floor(m / 12), mo = m - yr * 12;
+        ticks.push({ x: Math.round(xOf(m)), year: mo === 0, label: mo === 0 ? String(yr) : MON[mo] + (ticks.length ? '' : ' ' + yr) });
+      }
+      ticks.forEach(function (t) { t.w = measure(t.label, 'tick' + (t.year ? ' yr' : '')); });
+
+      /* rows; channel c is the gap above row c (one more channel below the last row) */
+      var rows = [], laneSpan = [];
+      pack(bands.top).forEach(function (r) { rows.push({ kind: 'band', h: ROW_Q, nodes: r }); });
+      lanes.forEach(function (l, li) {
+        var lr = laneRows[li].length ? laneRows[li] : [{ nodes: [] }];
+        laneSpan[li] = [rows.length, rows.length + lr.length - 1];
+        lr.forEach(function (r) { rows.push({ kind: 'lane', lane: li, h: ROW_P, nodes: r.nodes }); });
+      });
+      var axisRow = rows.length;
+      rows.push({ kind: 'axis', h: ROW_AX, nodes: [], obst: ticks.map(function (t) { return { lo: t.x - t.w / 2 - 8, hi: t.x + t.w / 2 + 8 }; }) });
+      pack(bands.bottom).forEach(function (r) { rows.push({ kind: 'band', h: ROW_Q, nodes: r }); });
+      rows.forEach(function (r, i) { r.nodes.forEach(function (n) { n.row = i; }); });
+      var nCh = rows.length + 1;
+
+      /* sides and ports: builds-on edges leave one shared port per source side (a tree); other ends are spread */
+      live.forEach(function (e) {
+        var ra = e.a.row, rb = e.b.row;
+        e.sa = ra < rb ? 'bot' : ra > rb ? 'top' : e.k === 'b' ? 'top' : 'bot';
+        e.sb = ra === rb ? e.sa : ra < rb ? 'top' : 'bot';
+        e.ca = e.sa === 'bot' ? ra + 1 : ra;
+        e.cb = e.sb === 'bot' ? rb + 1 : rb;
+        e.trunk = e.k === 'b' ? e.a.id + '|' + e.sa : null;
+      });
+      var sides = {}, trunks = {};
+      function slot(n, side, s) { var key = n.id + '|' + side; (sides[key] = sides[key] || { n: n, list: [] }).list.push(s); }
+      live.forEach(function (e) {
+        if (e.trunk) {
+          if (!trunks[e.trunk]) slot(e.a, e.sa, trunks[e.trunk] = { ends: [], ox: [] });
+          trunks[e.trunk].ends.push([e, 'xa']); trunks[e.trunk].ox.push(e.b.cx);
+        } else slot(e.a, e.sa, { ends: [[e, 'xa']], ox: [e.b.cx] });
+        slot(e.b, e.sb, { ends: [[e, 'xb']], ox: [e.a.cx] });
+      });
+      Object.keys(sides).forEach(function (key) {
+        var n = sides[key].n, list = sides[key].list, c = list.length, gap = c > 1 ? Math.min(11, (n.w - 20) / (c - 1)) : 0;
+        list.forEach(function (s) { s.o = avg(s.ox); });
+        list.sort(function (u, v) { return u.o - v.o; });
+        list.forEach(function (s, j) {
+          var px = Math.round(n.cx + (j - (c - 1) / 2) * gap);
+          s.ends.forEach(function (t) { t[0][t[1]] = px; });
+        });
+      });
+
+      /* routing: cheapest path from the channel next to the source to the channel next to the target. Cost =
+         horizontal length + HB per horizontal run (runs in the source channel are a little cheaper, so lines from
+         one source share a bus there). A line crosses a row only at an x where no node, tick label or earlier
+         line sits; edges from the same source port (one trunk) may share. */
+      var occ = rows.map(function (r) {
+        return r.nodes.map(function (n) { return { lo: n.cx - n.w / 2 - PADX, hi: n.cx + n.w / 2 + PADX }; }).concat(r.obst || []);
+      });
+      var stubs = [], segs = [], i;
+      for (i = 0; i < nCh; i++) { stubs.push([]); segs.push([]); }
+      live.forEach(function (e) {
+        stubs[e.ca].push({ x: e.xa, e: e, trunk: e.trunk });
+        stubs[e.cb].push({ x: e.xb, e: e, trunk: null });
+      });
+      function blocked(r, x, e) {
+        return occ[r].some(function (o) { return x > o.lo + 0.01 && x < o.hi - 0.01 && (!e.trunk || o.trunk !== e.trunk); });
+      }
+      function stubHit(c, x, e) {
+        return stubs[c].some(function (s) { return s.e !== e && (!e.trunk || s.trunk !== e.trunk) && Math.abs(s.x - x) < 4; });
+      }
+      function route(e) {   /* returns one run per channel on the way: { c, x1, x2 } (x1 = x2 when the line passes straight) */
+        var dir = e.cb > e.ca ? 1 : e.cb < e.ca ? -1 : 0, chs = [], c, k, i;
+        for (c = e.ca; ; c += dir) { chs.push(c); if (c === e.cb || !dir) break; }
+        var X = [e.xa, e.xb];
+        chs.forEach(function (c, k) {
+          if (k) occ[dir > 0 ? c - 1 : c].forEach(function (o) { X.push(o.lo, o.hi); });
+          stubs[c].forEach(function (s) { X.push(s.x - 4, s.x + 4); });
+        });
+        X = X.filter(function (x) { return x >= L + 6 && x <= W - 6; }).sort(function (a, b) { return a - b; })
+          .filter(function (x, j, a) { return !j || x - a[j - 1] > 0.01; });
+        function at(x) { for (var j = 0; j < X.length; j++) if (Math.abs(X[j] - x) < 0.02) return j; return -1; }
+        var n = X.length, ia = at(e.xa), ib = at(e.xb), INF = 1e12, from = [], entry = [], best = [];
+        for (i = 0; i < n; i++) entry.push(i === ia ? 0 : INF);
+        chs.forEach(function (c, k) {
+          var f = c === e.ca ? 0.95 : 1, src = [], h, hs;
+          best = entry.slice();
+          for (i = 0; i < n; i++) src.push(i);
+          for (h = INF, hs = -1, i = 0; i < n; i++) {
+            if (i) h += (X[i] - X[i - 1]) * f;
+            if (entry[i] + HB < h) { h = entry[i] + HB; hs = i; }
+            if (h < best[i]) { best[i] = h; src[i] = hs; }
+          }
+          for (h = INF, hs = -1, i = n - 1; i >= 0; i--) {
+            if (i < n - 1) h += (X[i + 1] - X[i]) * f;
+            if (entry[i] + HB < h) { h = entry[i] + HB; hs = i; }
+            if (h < best[i]) { best[i] = h; src[i] = hs; }
+          }
+          from.push(src);
+          if (k < chs.length - 1) entry = best.map(function (v, j) {
+            return blocked(dir > 0 ? c : c - 1, X[j], e) || stubHit(c, X[j], e) || stubHit(c + dir, X[j], e) ? INF : v;
+          });
+        });
+        /* no way through: straight at the target's x (check() reports the crossing) */
+        if (ia < 0 || ib < 0 || best[ib] >= INF) return chs.map(function (c, k) { return { c: c, x1: k ? e.xb : e.xa, x2: e.xb }; });
+        var runs = [], cur = ib;
+        for (k = chs.length - 1; k >= 0; k--) { var j = from[k][cur]; runs.unshift({ c: chs[k], x1: X[j], x2: X[cur] }); cur = j; }
+        return runs;
+      }
+      live.slice().sort(function (u, v) {
+        return (u.k === v.k ? 0 : u.k === 'b' ? -1 : 1) || Math.abs(v.b.row - v.a.row) - Math.abs(u.b.row - u.a.row);
+      }).forEach(function (e) {
+        var runs = route(e), dir = e.cb > e.ca ? 1 : -1;
+        e.runs = [];
+        runs.forEach(function (r, k) {
+          if (Math.abs(r.x1 - r.x2) > 0.5) {
+            var s = { c: r.c, x1: r.x1, x2: r.x2, lo: Math.min(r.x1, r.x2), hi: Math.max(r.x1, r.x2), anchor: k === 0 ? e.trunk : null };
+            segs[r.c].push(s); e.runs.push(s);
+          }
+          if (k < runs.length - 1) {   /* the vertical to the next channel */
+            occ[dir > 0 ? r.c : r.c - 1].push({ lo: r.x2 - 5, hi: r.x2 + 5, trunk: e.trunk });
+            stubs[r.c].push({ x: r.x2, e: e, trunk: e.trunk });
+            stubs[r.c + dir].push({ x: r.x2, e: e, trunk: e.trunk });
+          }
+        });
+      });
+      segs.forEach(function (list) {
+        list.sort(function (u, v) { return u.lo - v.lo || v.hi - u.hi; });
+        var tracks = [];
+        list.forEach(function (s) {
+          for (var t = 0; t < tracks.length; t++) {
+            if (tracks[t].every(function (o) { return (s.anchor && o.anchor === s.anchor) || s.lo >= o.hi + 12 || o.lo >= s.hi + 12; })) break;
+          }
+          (tracks[t] = tracks[t] || []).push(s); s.t = t;
+        });
+        list.nT = tracks.length;
+      });
+
+      /* vertical positions */
+      function minCh(c) {
+        var up = rows[c - 1], dn = rows[c];
+        if (!up || !dn) return 6;
+        if (up.kind === 'lane' && dn.kind === 'lane') return up.lane === dn.lane ? 8 : 14;
+        if (up.kind === 'axis') return 12;
+        if (dn.kind === 'axis') return 4;
+        return up.kind === dn.kind ? 6 : 14;
+      }
+      var chH = segs.map(function (list, c) { return Math.max(minCh(c), list.nT ? 2 * CPAD + (list.nT - 1) * TS : 0); });
+      var y = 0, chTop = [];
+      rows.forEach(function (r, i) { chTop[i] = y; y += chH[i]; r.cy = y + r.h / 2; y += r.h; });
+      chTop[rows.length] = y; y += chH[rows.length];
+      var H = Math.ceil(y);
+      function ty(s) { return chTop[s.c] + chH[s.c] / 2 + (s.t - (segs[s.c].nT - 1) / 2) * TS; }
+      function bound(c) {
+        var m = chTop[c] + chH[c] / 2;
+        return segs[c].some(function (s) { return Math.abs(ty(s) - m) < 2; }) ? m + TS / 2 : m;
+      }
+      nodes.forEach(function (n) { n.cy = rows[n.row].cy; });
+
+      /* static layer: lanes, labels, grid, ticks */
+      svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+      while (gStatic.firstChild) gStatic.removeChild(gStatic.firstChild);
+      var lTop = bound(laneSpan[0][0]), lBot = bound(laneSpan[lanes.length - 1][1] + 1);
+      lanes.forEach(function (l, li) {
+        var y0 = bound(laneSpan[li][0]), y1 = bound(laneSpan[li][1] + 1), lines = labs[li];
+        if (li % 2 === 0) el('rect', { class: 'lane-bg', x: 0, y: y0, width: W, height: y1 - y0 }, gStatic);
+        el('line', { class: 'lane-rule', x1: 0, x2: W, y1: y0, y2: y0 }, gStatic);
+        var t = el('text', { class: 'lane-lab', x: 8, y: (y0 + y1) / 2 + 4 - (lines.length - 1) * 6.5 }, gStatic);
+        lines.forEach(function (s, j) { el('tspan', { x: 8, dy: j ? 13 : 0 }, t).textContent = s; });
+      });
+      el('line', { class: 'lane-rule', x1: 0, x2: W, y1: lBot, y2: lBot }, gStatic);
+      ticks.forEach(function (t) {
+        el('line', { class: 'grid' + (t.year ? ' yr' : ''), x1: t.x, x2: t.x, y1: lTop, y2: lBot }, gStatic);
+        el('text', { class: 'tick' + (t.year ? ' yr' : ''), x: t.x, y: rows[axisRow].cy + 4 }, gStatic).textContent = t.label;
+      });
+      [[0, laneSpan[0][0] - 1], [axisRow + 1, rows.length - 1]].forEach(function (b) {
+        if (b[1] < b[0]) return;
+        var mid = (rows[b[0]].cy + rows[b[1]].cy) / 2;
+        el('text', { class: 'band-lab', x: 8, y: mid - 2 }, gStatic).textContent = 'earlier';
+        el('text', { class: 'band-lab', x: 8, y: mid + 11 }, gStatic).textContent = 'systems';
+      });
+
+      /* nodes */
+      mp.forEach(function (p) {
+        var x0 = p.cx - p.w / 2;
+        p.rect.setAttribute('x', x0); p.rect.setAttribute('y', p.cy - PH / 2); p.rect.setAttribute('width', p.w);
+        p.tNum.setAttribute('x', x0 + 9); p.tNum.setAttribute('y', p.cy + 4);
+        p.tLab.setAttribute('x', x0 + 9 + p.wn + 5); p.tLab.setAttribute('y', p.cy + 4.5);
+      });
+      priors.forEach(function (q) {
+        var x0 = q.cx - q.w / 2;
+        q.rect.setAttribute('x', x0); q.rect.setAttribute('y', q.cy - QH / 2); q.rect.setAttribute('width', q.w);
+        q.dot.setAttribute('cx', x0 + 8 + 3.2); q.dot.setAttribute('cy', q.cy);
+        q.tLab.setAttribute('x', x0 + 8 + 6.4 + 5); q.tLab.setAttribute('y', q.cy + 3.8);
+      });
+
+      /* edges: polyline through the chosen tracks and column, rounded corners */
+      live.forEach(function (e) {
+        var ya = e.a.cy + (e.sa === 'bot' ? 1 : -1) * e.a.h / 2, yb = e.b.cy + (e.sb === 'bot' ? 1 : -1) * e.b.h / 2;
+        var pts = [[e.xa, ya]];
+        e.runs.forEach(function (s) { pts.push([s.x1, ty(s)], [s.x2, ty(s)]); });
+        pts.push([e.xb, yb]);
+        e.pts = pts.filter(function (p, j) { return !j || Math.abs(p[0] - pts[j - 1][0]) > 0.01 || Math.abs(p[1] - pts[j - 1][1]) > 0.01; });
+        e.pts = e.pts.filter(function (p, j, a) {
+          return !j || j === a.length - 1 || !((a[j - 1][0] === p[0] && p[0] === a[j + 1][0]) || (a[j - 1][1] === p[1] && p[1] === a[j + 1][1]));
+        });
+        e.path.setAttribute('d', rounded(e.pts));
+      });
+    }
+    function f1(v) { return Math.round(v * 10) / 10; }
+    function rounded(p) {
+      var d = 'M' + f1(p[0][0]) + ',' + f1(p[0][1]);
+      for (var i = 1; i < p.length - 1; i++) {
+        var a = p[i - 1], b = p[i], c = p[i + 1];
+        var l1 = Math.hypot(b[0] - a[0], b[1] - a[1]), l2 = Math.hypot(c[0] - b[0], c[1] - b[1]), r = Math.min(R, l1 / 2, l2 / 2);
+        d += ' L' + f1(b[0] - (b[0] - a[0]) / l1 * r) + ',' + f1(b[1] - (b[1] - a[1]) / l1 * r) +
+          ' Q' + f1(b[0]) + ',' + f1(b[1]) + ' ' + f1(b[0] + (c[0] - b[0]) / l2 * r) + ',' + f1(b[1] + (c[1] - b[1]) / l2 * r);
+      }
+      var z = p[p.length - 1];
+      return d + ' L' + f1(z[0]) + ',' + f1(z[1]);
+    }
+
+    /* self-check: nodes must not overlap or leave the plot, edges must not cross nodes they do not connect */
+    function check() {
+      nodes.forEach(function (u, i) {
+        nodes.slice(i + 1).forEach(function (v) {
+          if (Math.abs(u.cx - v.cx) < (u.w + v.w) / 2 + 4 && Math.abs(u.cy - v.cy) < (u.h + v.h) / 2 + 2) warn('map: nodes overlap: ' + label(u) + ' / ' + label(v));
+        });
+        if (u.cx - u.w / 2 < L || u.cx + u.w / 2 > W) warn('map: node outside the plot: ' + label(u));
+      });
+      live.forEach(function (e) {
+        for (var i = 1; i < e.pts.length; i++) {
+          var p = e.pts[i - 1], q = e.pts[i];
+          nodes.forEach(function (n) {
+            if (n === e.a || n === e.b) return;
+            if (Math.max(p[0], q[0]) > n.cx - n.w / 2 - 2 && Math.min(p[0], q[0]) < n.cx + n.w / 2 + 2 &&
+                Math.max(p[1], q[1]) > n.cy - n.h / 2 - 2 && Math.min(p[1], q[1]) < n.cy + n.h / 2 + 2)
+              warn('map: edge ' + label(e.a) + ' → ' + label(e.b) + ' runs through ' + label(n));
+          });
+        }
+      });
+    }
+
+    /* legend: one chip per line color in use */
+    var legend = document.getElementById('fm-legend'), used = {};
+    live.forEach(function (e) {
+      if (e.k !== 'b') return;
+      var c = e.a.kind === 'prior' ? e.a.e : 'neutral';
+      (used[c] = used[c] || []).push(e.a.kind === 'prior' ? (names[c] || (c === 'neutral' ? 'other' : c)) : 'paper to paper');
+    });
+    var colored = Object.keys(used).filter(function (c) { return c !== 'neutral'; });
+    if (legend && colored.length) {
+      document.getElementById('fm-lg-b').lastChild.textContent = 'builds on (line color = what the earlier system provides)';
+      legend.appendChild(Object.assign(document.createElement('span'), { className: 'lg-sep' }));
+      SLOTS.filter(function (c) { return used[c]; }).forEach(function (c) {
+        var chip = document.createElement('span');
+        chip.className = 'chip e-' + c;
+        chip.textContent = used[c].filter(function (v, j, a) { return a.indexOf(v) === j; }).join(', ');
+        legend.appendChild(chip);
+      });
+    }
+
+    /* lineage and the info panel */
+    function lineage(id) {
+      var on = {}, eon = {};
+      on[id] = 1;
+      ['up', 'down'].forEach(function (dir) {
+        var stack = [id];
+        while (stack.length) {
+          var c = stack.pop();
+          live.forEach(function (e) {
+            if (e.k !== 'b') return;
+            var from = dir === 'up' ? e.b.id : e.a.id, to = dir === 'up' ? e.a.id : e.b.id;
+            if (from === c) { eon[e.key] = 1; if (!on[to]) { on[to] = 1; stack.push(to); } }
+          });
+        }
+      });
+      live.forEach(function (e) { if (e.k === 'c' && (e.a.id === id || e.b.id === id)) { eon[e.key] = 1; on[e.a.id] = 1; on[e.b.id] = 1; } });
+      return { on: on, eon: eon };
+    }
+    function rel(n, k, dir) {
+      var list = live.filter(function (e) { return e.k === k && (dir === 'in' ? e.b === n : e.a === n); })
+        .map(function (e) { return esc(label(dir === 'in' ? e.a : e.b)); });
+      return list.length ? list.join(', ') : 'none here';
+    }
+    var DEFAULT = '<p><b>Point at a paper</b> (or tap it once on a phone) to light up what it builds on, what builds on it and which papers it is compared with. Click it, or tap it a second time, to open its page. Grey systems can be tapped too.</p>';
+    var byId = {};
+    nodes.forEach(function (n) { byId[n.id] = n; });
+    function show(id) {
+      var l = lineage(id), n = byId[id];
+      svg.classList.add('has-focus');
+      nodes.forEach(function (m) { m.g.classList.toggle('on', !!l.on[m.id]); });
+      live.forEach(function (e) { e.g.classList.toggle('on', !!l.eon[e.key]); });
+      info.innerHTML = n.kind === 'paper' ?
+        '<p class="hd"><span class="ix-num">' + n.n + '</span><b>' + esc(n.method) + '</b><span class="chip cat">' + esc(n.category) + '</span><span class="muted">' + html(n.venue) + '</span></p>' +
+        '<p>' + html(n.one_liner) + '</p>' +
+        '<p class="rel">Builds on: ' + rel(n, 'b', 'in') + '. Built on by: ' + rel(n, 'b', 'out') +
+        '. Prints numbers of: ' + rel(n, 'c', 'out') + '. Its numbers are printed by: ' + rel(n, 'c', 'in') + '.</p>' +
+        '<p><a href="' + esc(n.slug) + '.html">Open the ' + esc(n.method) + ' page →</a></p>' :
+        '<p class="hd"><b>' + esc(n.name) + '</b><span class="chip e-' + n.e + '">earlier system</span><span class="muted">' + esc(n.role || '') + '</span></p>' +
+        '<p class="rel">Built on by: ' + rel(n, 'b', 'out') + '.</p>';
+    }
+    var pinned = null, lastPointer = 'mouse';
+    function clear() {
+      svg.classList.remove('has-focus');
+      nodes.forEach(function (n) { n.g.classList.remove('on', 'sel'); });
+      live.forEach(function (e) { e.g.classList.remove('on'); });
+      info.innerHTML = DEFAULT;
+    }
+    function pin(id) {
+      pinned = id;
+      show(id);
+      nodes.forEach(function (n) { n.g.classList.toggle('sel', n.id === id); });
+    }
+    function togglePin(id) { if (pinned === id) { pinned = null; clear(); } else pin(id); }
+    svg.addEventListener('pointerdown', function (ev) { lastPointer = ev.pointerType || 'mouse'; });
+    nodes.forEach(function (n) {
+      n.g.addEventListener('mouseenter', function () { if (lastPointer === 'mouse') show(n.id); });
+      n.g.addEventListener('mouseleave', function () { if (pinned) pin(pinned); else clear(); });
+      n.g.addEventListener('focus', function () { show(n.id); });
+      n.g.addEventListener('blur', function () { if (pinned) pin(pinned); else clear(); });
+      n.g.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        if (n.kind === 'prior') { togglePin(n.id); return; }
+        if (lastPointer !== 'mouse' && pinned !== n.id) { ev.preventDefault(); pin(n.id); }
+      });
+      if (n.kind === 'prior') n.g.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); togglePin(n.id); }
+      });
+    });
+    svg.addEventListener('click', function () { pinned = null; clear(); });
+    document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { pinned = null; clear(); } });
+    [['fm-tg-b', 'hide-b', true], ['fm-tg-c', 'show-c', false]].forEach(function (t) {
+      var b = document.getElementById(t[0]);
+      if (b) b.addEventListener('click', function () {
+        var on = b.getAttribute('aria-pressed') !== 'true';
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        svg.classList.toggle(t[1], t[2] ? !on : on);
+      });
+    });
+
+    window.FamilyMap = { show: show, pin: pin, clear: clear };
+    layout();
+    clear();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { layout(); check(); });
+    else check();
+  }
+})();
+</script>
+</body>
+</html>

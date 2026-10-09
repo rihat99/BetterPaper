@@ -1,0 +1,642 @@
+<!doctype html>
+<!-- better-paper page template. Copy to <out>/<slug>.html and replace every placeholder; keep the five section ids.
+     "guide §N" = references/design_guide.md. Placeholder names, numbers and figures are fictional. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MethodName</title>
+<meta name="description" content="MethodName (Venue Year): learned queries read a frozen image encoder, one object per query. Architecture, experiments and critical analysis.">
+<link rel="stylesheet" href="assets/site.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js" crossorigin="anonymous"></script>
+<script defer src="assets/site.js"></script>
+</head>
+<body>
+<!-- glyph sprite: keep as is (lock, dot, half, cycle, new, play, pause, prev, next, replay) -->
+<svg class="sprite" aria-hidden="true"><symbol id="g-lock" viewBox="0 0 12 12"><rect x="2" y="5.2" width="8" height="5.8" rx="1.2"/><path d="M4 5.2V3.9a2 2 0 0 1 4 0v1.3" fill="none" stroke="currentColor" stroke-width="1.4"/></symbol><symbol id="g-dot" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4"/></symbol><symbol id="g-half" viewBox="0 0 12 12"><circle cx="6" cy="6" r="3.7" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6 2.3a3.7 3.7 0 0 0 0 7.4z"/></symbol><symbol id="g-cycle" viewBox="0 0 12 12"><path d="M9.7 4.3A4 4 0 1 0 10 7.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10.8 1.4v3.6H7.2z"/></symbol><symbol id="g-new" viewBox="0 0 12 12"><path d="M6 1l5 5-5 5-5-5z"/></symbol><symbol id="g-play" viewBox="0 0 12 12"><path d="M3 1.6v8.8L10.4 6z"/></symbol><symbol id="g-pause" viewBox="0 0 12 12"><rect x="2.4" y="1.8" width="2.7" height="8.4" rx=".5"/><rect x="6.9" y="1.8" width="2.7" height="8.4" rx=".5"/></symbol><symbol id="g-prev" viewBox="0 0 12 12"><path d="M8 1.8L3.8 6 8 10.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol><symbol id="g-next" viewBox="0 0 12 12"><path d="M4 1.8L8.2 6 4 10.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol><symbol id="g-replay" viewBox="0 0 12 12"><path d="M2.7 6.2a3.4 3.4 0 1 0 1.1-2.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2 1.2v3.6h3.6z"/></symbol></svg>
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- AUTHOR: single paper with no index page: delete this .topbar and the footer.pager at the end -->
+<div class="topbar">
+  <a href="index.html">← All papers</a>
+</div>
+
+<div class="layout">
+<!-- ═════════════ 0. HEADER (guide §2) ═════════════ -->
+<header class="ph">
+  <div class="ph-kicker">
+    <!-- category: optimization | feed-forward | hybrid | application | dataset -->
+    <span class="chip cat">hybrid</span>
+    <span>Venue Year</span><span aria-hidden="true">·</span><span>arXiv 0000.00000</span>
+  </div>
+  <h1>MethodName</h1>
+  <p class="ph-title">Full Paper Title: Learned Queries Read a Frozen Encoder</p>
+  <p class="ph-authors">First Author, Second Author, Last Author · First University, Second Lab</p>
+  <p class="ph-links">
+    <a href="https://arxiv.org/abs/0000.00000">arXiv</a>
+    <a href="https://example.org/">Project page</a>
+    <a href="https://example.org/code">Code</a>
+    <span class="muted">code read at commit <code>abc1234</code> (Year-MM-DD)</span>
+  </p>
+  <p class="claim">A fixed set of learned queries, decoded against a frozen image encoder, finds every object in a frame in one pass, with no anchors and no non-maximum suppression. An optional per-video refinement then ties the objects and the camera to one world frame.</p>
+  <dl class="glance">
+    <div><dt>Input</dt><dd>Video frames or a single RGB image. No boxes, depth or camera intrinsics.</dd></div>
+    <div><dt>Output</dt><dd>Per frame: up to 100 objects, each with a class, a 2D box and a 3D position. With refinement: camera poses and one world scale.</dd></div>
+    <div><dt>Backbone</dt><dd>Frozen ViT-L/14 image encoder. Trained: neck, decoder, head and queries, 41.2 M parameters (counted from code).</dd></div>
+    <div><dt>Runtime</dt><dd>12 FPS single pass; refinement ≈ 40 s per 100-frame video.<br>Hardware <span class="tag">not stated</span></dd></div>
+  </dl>
+</header>
+
+<nav class="toc" aria-label="Contents">
+  <details open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#idea"><span class="toc-num">1</span>The idea</a></li>
+      <li><a href="#architecture"><span class="toc-num">2</span>Architecture</a></li>
+      <li><a href="#method"><span class="toc-num">3</span>Beyond the figures</a></li>
+      <li><a href="#experiments"><span class="toc-num">4</span>Experiments</a></li>
+      <li><a href="#analysis"><span class="toc-num">5</span>Critical analysis</a></li>
+    </ol>
+  </details>
+</nav>
+
+<main id="main">
+
+<!-- ═════════════ 1. THE IDEA ═════════════ -->
+<section id="idea">
+  <h2>A hundred learned questions, asked of a frozen encoder, find every object in one pass</h2>
+  <p>Earlier pipelines first propose many candidate boxes, score them, and then remove duplicates with hand-tuned rules. MethodName skips all of that. It keeps a strong pretrained image encoder frozen and trains a small decoder in which a fixed set of learned queries each look for at most one object.</p>
+
+  <!-- guide §3.2 storyboard: 4 panels in .story-grid + 1 output step in .story-out; data-frames = frames in the strip -->
+  <figure class="story panel wide" data-story data-frames="4" data-step-ms="600" aria-label="MethodName in five steps">
+    <div class="fig-head">
+      <p class="fig-title">Figure 1 · the idea, one frame at a time</p>
+      <div class="controls story-controls"></div>
+    </div>
+    <div class="story-grid">
+      <!-- step 1: the real input (frame strip, views, clip, rig) -->
+      <div class="story-step" data-step="1">
+        <h3><span class="story-num">1</span>Frames arrive one at a time</h3>
+        <svg class="fig-svg" viewBox="0 0 260 160" role="img" aria-labelledby="s1-t">
+          <title id="s1-t">A video frame with three simple objects on a floor, and a strip of four frames in which the objects move.</title>
+          <rect class="frame" x="6" y="6" width="176" height="104" rx="5"/>
+          <path class="faint" d="M6 92 L182 86"/>
+          <g class="e-neutral">
+            <path class="ink" d="M22 58h28v28h-28z M22 58l8-8h28l-8 8 M50 58l8-8v28l-8 8"/>
+            <ellipse class="ink" cx="96" cy="46" rx="11" ry="4"/><path class="ink" d="M85 46v34 M107 46v34 M85 80a11 4 0 0 0 22 0"/>
+            <circle class="ink" cx="144" cy="76" r="11"/>
+          </g>
+          <text class="t-mono" x="194" y="60">video or</text>
+          <text class="t-mono" x="194" y="74">one image</text>
+          <g>
+            <rect class="frame" data-frame="1" x="6" y="124" width="36" height="22" rx="2"/>
+            <rect class="frame" data-frame="2" x="48" y="124" width="36" height="22" rx="2"/>
+            <rect class="frame" data-frame="3" x="90" y="124" width="36" height="22" rx="2"/>
+            <rect class="frame" data-frame="4" x="132" y="124" width="36" height="22" rx="2"/>
+          </g>
+          <g class="e-neutral">
+            <rect class="ink-fill" x="11" y="133" width="6" height="6"/><circle class="ink-fill" cx="33" cy="137" r="2.6"/>
+            <rect class="ink-fill" x="55" y="133" width="6" height="6"/><circle class="ink-fill" cx="73" cy="136" r="2.6"/>
+            <rect class="ink-fill" x="99" y="133" width="6" height="6"/><circle class="ink-fill" cx="113" cy="135" r="2.6"/>
+            <rect class="ink-fill" x="143" y="133" width="6" height="6"/><circle class="ink-fill" cx="153" cy="134" r="2.6"/>
+          </g>
+          <text class="t-mono" x="178" y="139">t →</text>
+        </svg>
+        <p>Any RGB video, frame by frame, or a single image. Nothing else is needed.</p>
+      </div>
+      <!-- step 2 -->
+      <div class="story-step" data-step="2">
+        <h3><span class="story-num">2</span>A frozen encoder makes features</h3>
+        <svg class="fig-svg" viewBox="0 0 260 160" role="img" aria-labelledby="s2-t">
+          <title id="s2-t">The frame goes through a frozen image encoder, which turns it into a grid of feature tokens.</title>
+          <rect class="frame" x="4" y="62" width="44" height="32" rx="3"/>
+          <g class="e-neutral"><rect class="ink-fill" x="12" y="76" width="8" height="8"/><circle class="ink-fill" cx="36" cy="80" r="3.5"/></g>
+          <g class="e-neutral"><path class="flowline" d="M48 78 H58"/><path class="arrowhead" d="M64 78l-7-3.5v7z"/></g>
+          <g class="e-scene">
+            <rect class="box frozen" x="64" y="50" width="82" height="56" rx="7"/>
+            <text x="105" y="74" text-anchor="middle" font-weight="600">Image</text>
+            <text x="105" y="89" text-anchor="middle" font-weight="600">encoder</text>
+            <use href="#g-lock" class="glyph" x="131" y="91" width="11" height="11"/>
+            <path class="flowline" d="M146 78 H156"/><path class="arrowhead" d="M162 78l-7-3.5v7z"/>
+            <g transform="translate(166 46)">
+              <rect class="tok" x="0" y="0" width="14" height="14" rx="2"/><rect class="tok" x="17" y="0" width="14" height="14" rx="2"/><rect class="tok" x="34" y="0" width="14" height="14" rx="2"/><rect class="tok" x="51" y="0" width="14" height="14" rx="2"/><rect class="tok" x="68" y="0" width="14" height="14" rx="2"/>
+              <rect class="tok" x="0" y="17" width="14" height="14" rx="2"/><rect class="tok" x="17" y="17" width="14" height="14" rx="2"/><rect class="tok" x="34" y="17" width="14" height="14" rx="2"/><rect class="tok" x="51" y="17" width="14" height="14" rx="2"/><rect class="tok" x="68" y="17" width="14" height="14" rx="2"/>
+              <rect class="tok" x="0" y="34" width="14" height="14" rx="2"/><rect class="tok" x="17" y="34" width="14" height="14" rx="2"/><rect class="tok" x="34" y="34" width="14" height="14" rx="2"/><rect class="tok" x="51" y="34" width="14" height="14" rx="2"/><rect class="tok" x="68" y="34" width="14" height="14" rx="2"/>
+              <rect class="tok" x="0" y="51" width="14" height="14" rx="2"/><rect class="tok" x="17" y="51" width="14" height="14" rx="2"/><rect class="tok" x="34" y="51" width="14" height="14" rx="2"/><rect class="tok" x="51" y="51" width="14" height="14" rx="2"/><rect class="tok" x="68" y="51" width="14" height="14" rx="2"/>
+            </g>
+            <text class="t-e" x="166" y="130">image features</text>
+          </g>
+          <text class="t-mono" x="105" y="124" text-anchor="middle">frozen</text>
+          <text class="t-mono" x="166" y="146">N × 1024</text>
+        </svg>
+        <p>A pretrained vision transformer turns the frame into feature tokens. It is never retrained.</p>
+      </div>
+      <!-- step 3 -->
+      <div class="story-step" data-step="3">
+        <h3><span class="story-num">3</span>Learned queries ask what is there</h3>
+        <svg class="fig-svg" viewBox="0 0 260 160" role="img" aria-labelledby="s3-t">
+          <title id="s3-t">A column of learned query tokens attends to the image features; three queries find an object, one finds nothing.</title>
+          <g class="e-human">
+            <text class="t-e" x="6" y="14">learned queries</text>
+            <rect class="ring-new" x="8" y="22" width="34" height="106" rx="8"/>
+            <rect class="tok hot" x="15" y="29" width="20" height="20" rx="3"/><rect class="tok hot" x="15" y="53" width="20" height="20" rx="3"/><rect class="tok hot" x="15" y="77" width="20" height="20" rx="3"/><rect class="tok" x="15" y="101" width="20" height="20" rx="3"/>
+            <path class="flowline" d="M35 39 C90 39 100 54 146 54"/><path class="arrowhead" d="M153 54l-7-3.5v7z"/>
+            <path class="flowline" d="M35 63 C90 63 100 71 146 71"/><path class="arrowhead" d="M153 71l-7-3.5v7z"/>
+            <path class="flowline" d="M35 87 C90 87 100 105 146 105"/><path class="arrowhead" d="M153 105l-7-3.5v7z"/>
+          </g>
+          <text class="t-mono" x="50" y="124">4th: no object</text>
+          <g class="e-scene">
+            <text class="t-e" x="156" y="14">image features</text>
+            <g transform="translate(156 30)">
+              <rect class="tok" x="0" y="0" width="14" height="14" rx="2"/><rect class="tok" x="17" y="0" width="14" height="14" rx="2"/><rect class="tok" x="34" y="0" width="14" height="14" rx="2"/><rect class="tok" x="51" y="0" width="14" height="14" rx="2"/><rect class="tok" x="68" y="0" width="14" height="14" rx="2"/>
+              <rect class="tok" x="0" y="17" width="14" height="14" rx="2"/><rect class="tok hot" x="17" y="17" width="14" height="14" rx="2"/><rect class="tok" x="34" y="17" width="14" height="14" rx="2"/><rect class="tok" x="51" y="17" width="14" height="14" rx="2"/><rect class="tok" x="68" y="17" width="14" height="14" rx="2"/>
+              <rect class="tok" x="0" y="34" width="14" height="14" rx="2"/><rect class="tok" x="17" y="34" width="14" height="14" rx="2"/><rect class="tok" x="34" y="34" width="14" height="14" rx="2"/><rect class="tok hot" x="51" y="34" width="14" height="14" rx="2"/><rect class="tok" x="68" y="34" width="14" height="14" rx="2"/>
+              <rect class="tok" x="0" y="51" width="14" height="14" rx="2"/><rect class="tok" x="17" y="51" width="14" height="14" rx="2"/><rect class="tok" x="34" y="51" width="14" height="14" rx="2"/><rect class="tok" x="51" y="51" width="14" height="14" rx="2"/><rect class="tok" x="68" y="51" width="14" height="14" rx="2"/>
+              <rect class="tok" x="0" y="68" width="14" height="14" rx="2"/><rect class="tok" x="17" y="68" width="14" height="14" rx="2"/><rect class="tok hot" x="34" y="68" width="14" height="14" rx="2"/><rect class="tok" x="51" y="68" width="14" height="14" rx="2"/><rect class="tok" x="68" y="68" width="14" height="14" rx="2"/>
+            </g>
+          </g>
+          <text class="t-mono" x="156" y="130">cross-attention</text>
+          <text class="t-mono" x="8" y="146">Q = 100, trained</text>
+        </svg>
+        <p>Each of 100 learned query tokens attends to the features and claims at most one object; spare queries answer “no object”.</p>
+      </div>
+      <!-- step 4 -->
+      <div class="story-step" data-step="4">
+        <h3><span class="story-num">4</span>The decoder answers per query</h3>
+        <svg class="fig-svg" viewBox="0 0 260 160" role="img" aria-labelledby="s4-t">
+          <title id="s4-t">Queries and features enter a trained transformer decoder; a small head turns each decoded query into a box and a class.</title>
+          <g class="e-human"><rect class="tok hot" x="8" y="6" width="14" height="14" rx="3"/><rect class="tok hot" x="25" y="6" width="14" height="14" rx="3"/><rect class="tok hot" x="42" y="6" width="14" height="14" rx="3"/><text class="t-e" x="8" y="34">Q</text></g>
+          <g class="e-scene"><rect class="tok" x="72" y="6" width="14" height="14" rx="2"/><rect class="tok" x="89" y="6" width="14" height="14" rx="2"/><rect class="tok" x="106" y="6" width="14" height="14" rx="2"/><rect class="tok" x="123" y="6" width="14" height="14" rx="2"/><rect class="tok" x="140" y="6" width="14" height="14" rx="2"/><text class="t-e" x="72" y="34">F</text></g>
+          <g class="e-neutral"><path class="flowline" d="M88 38 V46"/><path class="arrowhead" d="M88 52l-3.5-7h7z"/></g>
+          <g class="e-human">
+            <rect class="box trained" x="8" y="54" width="160" height="44" rx="7"/>
+            <text x="88" y="73" text-anchor="middle" font-weight="600">Transformer decoder</text>
+            <text x="88" y="89" text-anchor="middle" class="t-mono">8 layers</text>
+            <use href="#g-dot" class="glyph" x="153" y="84" width="10" height="10"/>
+            <path class="flowline" d="M168 76 H184"/><path class="arrowhead" d="M190 76l-7-3.5v7z"/>
+            <rect class="box trained" x="192" y="54" width="62" height="44" rx="7"/>
+            <text x="223" y="73" text-anchor="middle" font-weight="600">Head</text>
+            <text x="223" y="89" text-anchor="middle" class="t-mono">MLP</text>
+            <use href="#g-dot" class="glyph" x="240" y="84" width="10" height="10"/>
+            <path class="flowline geom" d="M223 100 V114"/><path class="arrowhead" d="M223 121l-4-7h8z"/>
+            <text class="t-e" x="223" y="134" text-anchor="middle">box</text>
+            <text class="t-e" x="223" y="148" text-anchor="middle">+ class</text>
+          </g>
+          <g class="e-neutral"><path class="flowline loss" d="M60 100 V114"/><path class="arrowhead" d="M60 120l-3.5-7h7z" style="fill:var(--loss)"/></g>
+          <text class="t-mono" x="60" y="132" text-anchor="middle">aux. loss</text>
+          <text class="t-mono" x="8" y="153">one pass per frame</text>
+        </svg>
+        <p>A trained decoder lets the queries read the features; a small head turns each decoded query into a class and a box.</p>
+      </div>
+    </div>
+    <!-- step 5: output -->
+    <div class="story-out">
+      <div class="story-step" data-step="5">
+        <h3><span class="story-num">5</span>One box, class and 3D position per object</h3>
+        <!-- human/scene papers: the world widget (guide §3.2) replaces the output SVG below; uncomment it and delete the <svg>
+        <div class="world" data-world>
+          <script type="application/json">{"people": 2, "camera": "moving", "ground": "plane", "walls": true, "objects": 3, "frames": 4, "seed": 7}</script>
+          <canvas aria-label="Illustration: ... Drag or use arrow keys to rotate."></canvas>
+          <div class="world-key"><span class="chip e-human">humans</span><span class="chip e-scene">scene points</span><span class="chip e-camera">camera path</span></div>
+          <span class="world-tag">illustration, not real data · drag to rotate</span>
+        </div>
+        -->
+        <!-- output panel: 400 units wide (the CSS max-width), so it is drawn about 1:1 on desktop and on phones -->
+        <svg class="fig-svg" viewBox="0 0 400 160" role="img" aria-labelledby="s5-t">
+          <title id="s5-t">Left: the frame with a labelled box around each object. Right: the same objects placed in 3D on a ground plane, with the camera path built up frame by frame.</title>
+          <rect class="frame" x="4" y="6" width="196" height="120" rx="5"/>
+          <path class="faint" d="M4 104 L200 98"/>
+          <g class="e-neutral">
+            <path class="ink" d="M26 64h28v28h-28z M26 64l8-8h28l-8 8 M54 64l8-8v28l-8 8" opacity=".55"/>
+            <ellipse class="ink" cx="104" cy="52" rx="11" ry="4" opacity=".55"/><path class="ink" d="M93 52v38 M115 52v38 M93 90a11 4 0 0 0 22 0" opacity=".55"/>
+            <circle class="ink" cx="160" cy="82" r="12" opacity=".55"/>
+          </g>
+          <g class="e-human">
+            <rect class="ink" x="20" y="50" width="48" height="54" rx="2"/><text class="t-e" x="20" y="44">box</text>
+            <rect class="ink" x="88" y="42" width="32" height="56" rx="2"/><text class="t-e" x="88" y="36">can</text>
+            <rect class="ink" x="144" y="66" width="32" height="32" rx="2"/><text class="t-e" x="144" y="60">ball</text>
+          </g>
+          <text class="t-mono" x="4" y="146">2D: box + class</text>
+          <g class="e-neutral"><path class="flowline" d="M206 66 H216"/><path class="arrowhead" d="M222 66l-7-3.5v7z"/></g>
+          <path class="faint" d="M232 128 L280 100 L396 100 L348 128 Z"/>
+          <g class="e-human">
+            <path class="ink" d="M282 120h14v-11h-14z M282 109l5-4h14l-5 4 M296 109l5-4v11l-5 4"/>
+            <ellipse class="ink" cx="322" cy="106" rx="6" ry="2.4"/><path class="ink" d="M316 106v11 M328 106v11 M316 117a6 2.4 0 0 0 12 0"/>
+            <circle class="ink" cx="356" cy="114" r="5.5"/>
+          </g>
+          <g class="e-camera">
+            <path class="flowline rec" d="M244 56 C280 34 340 32 384 46"/>
+            <path class="ink grow" data-frame="1" d="M238 51h12l-3 9h-6z"/>
+            <path class="ink grow" data-frame="2" d="M281 36h12l-3 9h-6z"/>
+            <path class="ink grow" data-frame="3" d="M330 33h12l-3 9h-6z"/>
+            <path class="ink grow" data-frame="4" d="M378 41h12l-3 9h-6z"/>
+            <text class="t-mono" x="232" y="20">camera path</text>
+          </g>
+          <text class="t-mono" x="232" y="146">3D: one world frame</text>
+        </svg>
+        <p>Every kept query gives a class, a 2D box and a 3D position. The optional refinement adds the camera path.</p>
+      </div>
+      <div class="story-notes">
+        <div><b>Trained:</b> neck, decoder, head and the 100 queries, 41.2 M parameters (counted from the code). The encoder stays frozen.</div>
+        <div><b>One pass:</b> one forward pass per frame, 12 FPS. The per-video refinement (Section 2) is optional and runs offline.</div>
+        <div><b>Not needed:</b> anchor boxes, non-maximum suppression, depth or camera intrinsics.</div>
+      </div>
+    </div>
+    <figcaption>Play runs four frames through the five steps; the camera path on the right builds up frame by frame. At rest everything is shown. The drawings are schematic, not MethodName output.</figcaption>
+  </figure>
+
+  <p>The design choice that matters is <strong>keeping the encoder frozen and making the decoder do the work</strong>. Each query is matched to at most one ground-truth object during training, so duplicates are penalised by the loss itself instead of being removed afterwards.</p>
+</section>
+
+<!-- ═════════════ 2. ARCHITECTURE ═════════════ -->
+<section id="architecture">
+  <h2>One frozen encoder, one fine-tuned neck, one trained query decoder</h2>
+  <p>This is the model as the released code builds it (commit <code>abc1234</code>), not as the paper's Figure 2 draws it. Blocks and edges where the two disagree carry a <span class="ne">≠</span> badge; open them to see both versions.</p>
+
+  <!-- KEEP ONE of the two diagrams (a hybrid method may keep both): feed-forward network (guide §3.3) or stage timeline (guide §3.4) -->
+  <!-- guide §3.3 architecture diagram; add data-no-code to the .arch host when the paper released no model code -->
+  <figure class="panel wide arch-wide" style="padding-bottom:.8rem">
+    <div class="arch" data-arch>
+<script type="application/json">
+{
+  "title": "MethodName architecture as implemented in the released code",
+  "viewBox": [0, 0, 1240, 462],
+  "minWidth": 1000,
+  "groups": [{"x": 628, "y": 328, "w": 444, "h": 96, "label": "training only", "labelBelow": true}],
+  "nodes": [
+    {"id": "img", "x": 8, "y": 170, "w": 112, "h": 60, "label": "Input frame", "sub": "RGB, H×W", "shape": "3×H×W", "e": "neutral", "state": "data", "detail": {"does": "One RGB video frame, or a single image. Resized so the long side is 518 px (a multiple of the 14-px patch).", "out": "3×H×W, normalised with the encoder's mean and standard deviation.", "code": "src/data/transforms.py:12-40"}},
+    {"id": "enc", "x": 204, "y": 170, "w": 150, "h": 60, "label": "Image encoder", "sub": "ViT-L/14", "shape": "F: N×1024", "e": "scene", "state": "frozen", "detail": {"does": "A pretrained vision transformer, unchanged. Features are read at four depths (layers 6, 12, 18 and 24).", "in": "3×H×W", "out": "Four maps of N×1024 tokens, N = (H/14)·(W/14).", "params": "≈ 300 M, frozen.", "train": "Not trained here.", "eq": "F^{(l)} = \\mathrm{ViT}_{l}(I),\\quad l \\in \\{6, 12, 18, 24\\}", "code": "src/model/encoder.py:30-75"}},
+    {"id": "neck", "x": 438, "y": 170, "w": 136, "h": 60, "label": "Feature neck", "sub": "pretrained FPN", "shape": "F′: N×256", "e": "scene", "state": "finetuned", "detail": {"does": "Fuses the four feature maps into one 256-d map at 1/14 resolution. Initialised from a pretrained checkpoint, then fine-tuned.", "in": "Four maps of N×1024", "out": "<span class=\"math\">F'</span>: N×256", "params": "12.4 M, fine-tuned with a 10× lower learning rate.", "code": "src/model/neck.py:18-96"}},
+    {"id": "queries", "x": 420, "y": 30, "w": 150, "h": 60, "label": "Learned queries", "sub": "Q = 100", "shape": "Q_0: 100×256", "e": "human", "state": "trained", "new": true, "detail": {"does": "100 learned embeddings, the same for every image. Each one learns to look for at most one object.", "out": "<span class=\"math\">Q_0</span>: 100×256", "params": "25.6 k (100 × 256).", "train": "Trained from scratch with the decoder."}},
+    {"id": "dec", "x": 658, "y": 30, "w": 150, "h": 260, "label": "Transformer\ndecoder", "sub": "8 layers","shape": "100×256", "e": "human", "state": "trained", "mismatch": "Paper: 6 decoder layers. Code: 8 (config default).", "detail": {"does": "Each layer: self-attention among the queries (so they can split the objects between them), then cross-attention from the queries to the image features.", "in": "<span class=\"math\">Q_0</span>: 100×256 and <span class=\"math\">F'</span>: N×256", "out": "<span class=\"math\">Q_L</span>: 100×256, plus the output of every layer for the auxiliary loss.", "params": "19.6 M.", "eq": "Q_{l} = \\mathrm{CrossAttn}\\big(\\mathrm{SelfAttn}(Q_{l-1}),\\ F'\\big),\\quad l = 1 \\dots L", "code": "src/model/decoder.py:40-133", "paper": "Paper (p.4): L = 6 layers. Released config: L = 8. The paper's numbers may come from either."}},
+    {"id": "head", "x": 892, "y": 170, "w": 150, "h": 60, "label": "Prediction head", "sub": "3-layer MLP", "shape": "100×(C+8)", "e": "human", "state": "trained", "detail": {"does": "Shared across queries: class logits (C classes plus “no object”), a 2D box and a 3D position for each decoded query.", "in": "<span class=\"math\">Q_L</span>: 100×256", "out": "C+1 logits, 4 box values, 3 position values per query.", "params": "6.8 M.", "code": "src/model/head.py:10-52"}},
+    {"id": "out", "x": 1120, "y": 170, "w": 112, "h": 60, "label": "Predictions", "sub": "box, class", "shape": "K ≤ 100", "e": "neutral", "state": "data", "detail": {"does": "Queries whose best class is “no object”, or whose score is below 0.5, are dropped. No non-maximum suppression.", "out": "Up to 100 objects per frame."}},
+    {"id": "l_aux", "x": 640, "y": 340, "w": 150, "h": 56, "label": "L_{aux}", "sub": "deep supervision", "e": "human", "state": "loss", "detail": {"does": "The matching loss applied to the output of every decoder layer through the shared head, not only the last one.", "params": "Weight 1.0 per layer.", "code": "src/losses.py:88-102"}},
+    {"id": "l_match", "x": 910, "y": 340, "w": 150, "h": 56, "label": "L_{match}", "sub": "vs. ground truth", "e": "human", "state": "loss", "detail": {"does": "Finds the one-to-one assignment between queries and ground-truth objects with the lowest cost (Hungarian matching), then applies a class loss to every query and box and position losses to matched ones.", "eq": "\\mathcal{L}_{match} = \\sum_{i} \\Big[\\lambda_{cls}\\,\\mathcal{L}_{cls}(c_i, \\hat c_{\\sigma(i)}) + \\lambda_{box}\\,\\lVert b_i - \\hat b_{\\sigma(i)}\\rVert_1\\Big]", "code": "src/losses.py:20-87", "paper": "Paper (Eq. 3): the matching cost is class + L1 box. Code: adds a generalised-IoU term with weight 2."}},
+    {"id": "sum", "kind": "circle", "x": 830, "y": 348, "w": 40, "h": 40, "label": "Σ", "sub": "total loss", "e": "neutral", "state": "op", "detail": {"does": "Sum of the matching loss on the last layer and the auxiliary losses on the earlier layers."}}
+  ],
+  "edges": [
+    {"from": "img", "to": "enc", "label": "resized", "shape": "3×H×W", "pts": [[120, 200], [204, 200]], "lx": 162, "ly": 192},
+    {"from": "enc", "to": "neck", "label": "4 levels", "shape": "4×N×1024", "pts": [[354, 200], [438, 200]], "lx": 396, "ly": 192},
+    {"from": "neck", "to": "dec", "label": "K, V", "shape": "N×256", "pts": [[574, 200], [658, 200]], "lx": 616, "ly": 192},
+    {"from": "queries", "to": "dec", "label": "Q_0", "shape": "100×256", "pts": [[570, 60], [658, 60]], "lx": 614, "ly": 52},
+    {"from": "dec", "to": "head", "label": "Q_L", "shape": "100×256", "pts": [[808, 200], [892, 200]], "lx": 850, "ly": 192},
+    {"from": "head", "to": "out", "flow": "geom", "label": "boxes", "pts": [[1042, 200], [1120, 200]], "lx": 1081, "ly": 192},
+    {"from": "head", "to": "l_match", "flow": "loss", "label": "matched", "mismatch": "Paper: matching cost = class + L1 box. Code: also a GIoU term.", "pts": [[985, 230], [985, 340]], "lx": 992, "ly": 268, "anchor": "start", "bx": 985, "by": 306},
+    {"from": "dec", "to": "l_aux", "flow": "loss", "label": "every layer", "pts": [[715, 290], [715, 340]], "lx": 722, "ly": 319, "anchor": "start"},
+    {"from": "l_aux", "to": "sum", "flow": "loss", "pts": [[790, 368], [830, 368]]},
+    {"from": "l_match", "to": "sum", "flow": "loss", "pts": [[910, 368], [870, 368]]}
+  ],
+  "steps": [
+    {"title": "A frame arrives", "text": "The frame is resized so its long side is 518 px and goes to the frozen image encoder.", "nodes": ["img", "enc"], "edges": ["img>enc"]},
+    {"title": "Frozen features, fine-tuned neck", "text": "The encoder gives features at four depths. The neck, pretrained and then fine-tuned, fuses them into one 256-d map <span class=\"math\">F'</span>.", "nodes": ["enc", "neck"], "edges": ["enc>neck"]},
+    {"title": "Learned queries", "text": "100 learned query tokens <span class=\"math\">Q_0</span> enter the decoder. They are the same for every image; this is the paper's main new part.", "nodes": ["queries", "dec"], "edges": ["queries>dec"]},
+    {"title": "Queries read the image", "text": "In each decoder layer the queries first attend to each other, then to the image features (keys and values).", "nodes": ["neck", "queries", "dec"], "edges": ["neck>dec", "queries>dec"]},
+    {"title": "One prediction per query", "text": "A shared head turns each decoded query into class logits, a 2D box and a 3D position. Queries that answer “no object” are dropped.", "nodes": ["dec", "head", "out"], "edges": ["dec>head", "head>out"]},
+    {"title": "Match to ground truth", "text": "In training, Hungarian matching assigns each ground-truth object to one query. The code adds a GIoU term to the matching cost that the paper does not list.", "nodes": ["head", "l_match"], "edges": ["head>l_match"]},
+    {"title": "Supervise every layer", "text": "The same loss is applied after every decoder layer (deep supervision) and summed. These losses exist only in training.", "nodes": ["dec", "l_aux", "l_match", "sum"], "edges": ["dec>l_aux", "l_aux>sum", "l_match>sum"]}
+  ]
+}
+</script>
+    </div>
+  </figure>
+
+  <!-- guide §3.4 stage timeline (optimization methods): same component with "stages"; vars = optimized variables, terms = active energies -->
+  <h3>Optional per-video refinement, in three stages</h3>
+  <p>For a whole video the single-pass predictions can be refined offline. The objects, the cameras and one world scale become variables, and three stages release them one group at a time. Click a stage, or press Run stages.</p>
+  <figure class="panel wide arch-wide" style="padding-bottom:.8rem">
+    <div class="arch" data-arch>
+<script type="application/json">
+{
+  "title": "MethodName per-video refinement in three stages",
+  "viewBox": [0, -12, 1240, 500],
+  "minWidth": 1000,
+  "stageMatTitle": "Per stage",
+  "nodes": [
+    {"id": "kp2d", "x": 10, "y": 40, "w": 160, "h": 60, "label": "2D evidence", "sub": "keypoint detector", "e": "human", "state": "frozen", "detail": {"does": "An off-the-shelf 2D keypoint detector, run once per frame before the refinement.", "out": "K keypoints × 2 per object per frame, with confidences."}},
+    {"id": "init", "x": 10, "y": 140, "w": 160, "h": 60, "label": "Initial objects", "sub": "feed-forward pass", "e": "human", "state": "frozen", "detail": {"does": "The single-pass predictions of the network above give the initial pose and shape of every object."}},
+    {"id": "slam", "x": 10, "y": 240, "w": 160, "h": 60, "label": "Camera init", "sub": "SLAM", "e": "camera", "state": "frozen", "detail": {"does": "SLAM gives up-to-scale camera poses, used as the initial camera trajectory."}},
+    {"id": "depth", "x": 10, "y": 340, "w": 160, "h": 60, "label": "Metric depth", "sub": "monocular depth", "e": "scene", "state": "frozen", "detail": {"does": "A monocular metric depth model, used to initialise the world scale."}},
+    {"id": "v_pose", "x": 250, "y": 40, "w": 180, "h": 60, "label": "Object pose", "sub": "R, t per object", "e": "human", "state": "optimized", "detail": {"does": "Rotation and translation of every object in every frame.", "params": "Optimized per video."}},
+    {"id": "v_shape", "x": 250, "y": 140, "w": 180, "h": 60, "label": "Object shape", "sub": "β per object", "e": "human", "state": "optimized", "detail": {"does": "One shape vector per object, shared by all frames."}},
+    {"id": "v_cam", "x": 250, "y": 240, "w": 180, "h": 60, "label": "Camera poses", "sub": "R_t, T_t", "e": "camera", "state": "optimized", "detail": {"does": "Camera rotation and translation per frame."}},
+    {"id": "v_scale", "x": 250, "y": 340, "w": 180, "h": 60, "label": "World scale", "sub": "s (1 scalar)", "e": "camera","state": "optimized", "detail": {"does": "One scale factor that converts the SLAM trajectory to metres."}},
+    {"id": "fwd", "kind": "circle", "x": 500, "y": 185, "w": 50, "h": 50, "label": "f", "sub": "project", "e": "neutral", "state": "op", "detail": {"does": "Places the objects in the world with the cameras and projects their keypoints into each frame."}},
+    {"id": "e_2d", "x": 610, "y": 30, "w": 170, "h": 56, "label": "E_{2D}", "sub": "reprojection", "e": "human", "state": "loss", "detail": {"does": "Confidence-weighted distance between projected and detected 2D keypoints.", "eq": "E_{2D} = \\sum_t \\sum_k c_{tk}\\, \\rho\\big(\\Pi(T_t, X_{tk}) - x_{tk}\\big)"}},
+    {"id": "e_prior", "x": 610, "y": 112, "w": 170, "h": 56, "label": "E_{prior}", "sub": "shape prior", "e": "human", "state": "loss", "detail": {"does": "Keeps shapes near the class mean."}},
+    {"id": "e_smooth", "x": 610, "y": 194, "w": 170, "h": 56, "label": "E_{smooth}", "sub": "temporal", "e": "human", "state": "loss", "detail": {"does": "Penalises acceleration of the objects between consecutive frames."}},
+    {"id": "e_contact", "x": 610, "y": 276, "w": 170, "h": 56, "label": "E_{contact}", "sub": "ground support", "e": "contact", "state": "loss", "detail": {"does": "Objects predicted to rest on the ground should touch it and not slide."}},
+    {"id": "e_depth", "x": 610, "y": 358, "w": 170, "h": 56, "label": "E_{depth}", "sub": "scene align", "e": "scene", "state": "loss", "detail": {"does": "Aligns the objects with the metric depth of the scene."}},
+    {"id": "sum", "kind": "circle", "x": 845, "y": 185, "w": 50, "h": 50, "label": "Σ", "sub": "total E", "subPos": "above", "e": "neutral", "state": "op", "detail": {"does": "Weighted sum of the energy terms that are on in the current stage."}},
+    {"id": "out", "x": 1000, "y": 170, "w": 230, "h": 80, "label": "Refined objects\n+ cameras", "e": "neutral", "state": "data", "detail": {"does": "The variables after the last stage."}}
+  ],
+  "edges": [
+    {"from": "kp2d", "to": "e_2d", "flow": "loss", "pts": [[90, 40], [90, 16], [595, 16], [595, 48], [610, 48]], "label": "observed 2D keypoints", "lx": 340, "ly": 8},
+    {"from": "init", "to": "v_pose", "pts": [[170, 170], [205, 170], [205, 70], [250, 70]], "label": "init", "lx": 211, "ly": 125, "anchor": "start"},
+    {"from": "init", "to": "v_shape", "pts": [[170, 170], [250, 170]]},
+    {"from": "slam", "to": "v_cam", "pts": [[170, 270], [250, 270]], "label": "init", "lx": 210, "ly": 262},
+    {"from": "depth", "to": "v_scale", "pts": [[170, 370], [250, 370]], "label": "init", "lx": 210, "ly": 362},
+    {"from": "v_pose", "to": "fwd", "pts": [[430, 70], [470, 70], [470, 210], [500, 210]]},
+    {"from": "v_shape", "to": "fwd", "pts": [[430, 170], [470, 170], [470, 210], [500, 210]]},
+    {"from": "v_cam", "to": "fwd", "pts": [[430, 270], [470, 270], [470, 210], [500, 210]]},
+    {"from": "v_scale", "to": "fwd", "pts": [[430, 370], [470, 370], [470, 210], [500, 210]]},
+    {"from": "fwd", "to": "e_2d", "pts": [[550, 210], [580, 210], [580, 68], [610, 68]]},
+    {"from": "fwd", "to": "e_prior", "pts": [[550, 210], [580, 210], [580, 140], [610, 140]]},
+    {"from": "fwd", "to": "e_smooth", "pts": [[550, 210], [580, 210], [580, 222], [610, 222]]},
+    {"from": "fwd", "to": "e_contact", "pts": [[550, 210], [580, 210], [580, 304], [610, 304]]},
+    {"from": "fwd", "to": "e_depth", "pts": [[550, 210], [580, 210], [580, 386], [610, 386]]},
+    {"from": "e_2d", "to": "sum", "flow": "loss", "pts": [[780, 58], [815, 58], [815, 210], [845, 210]]},
+    {"from": "e_prior", "to": "sum", "flow": "loss", "pts": [[780, 140], [815, 140], [815, 210], [845, 210]]},
+    {"from": "e_smooth", "to": "sum", "flow": "loss", "pts": [[780, 222], [815, 222], [815, 210], [845, 210]]},
+    {"from": "e_contact", "to": "sum", "flow": "loss", "pts": [[780, 304], [815, 304], [815, 210], [845, 210]]},
+    {"from": "e_depth", "to": "sum", "flow": "loss", "pts": [[780, 386], [815, 386], [815, 210], [845, 210]]},
+    {"from": "sum", "to": "v_scale", "flow": "rec", "pts": [[870, 235], [870, 470], [340, 470], [340, 400]], "label": "∇E: update this stage's variables", "lx": 605, "ly": 462},
+    {"from": "sum", "to": "out", "flow": "geom", "pts": [[895, 210], [1000, 210]], "label": "converged", "lx": 947, "ly": 202}
+  ],
+  "stages": [
+    {"label": "1 · Pose + scale", "iters": 200, "title": "Place the objects", "text": "Only the object poses and the world scale move; shapes stay at the single-pass estimate.", "nodes": ["fwd", "sum"], "vars": ["v_pose", "v_scale"], "terms": {"e_2d": 1.0, "e_smooth": 10}},
+    {"label": "2 · + Shape", "iters": 500, "title": "Refine the objects", "text": "Shapes are released; a shape prior keeps them plausible.", "nodes": ["fwd", "sum"], "vars": ["v_pose", "v_shape", "v_scale"], "terms": {"e_2d": 1.0, "e_prior": 0.04, "e_smooth": 10}},
+    {"label": "3 · + Cameras, contact", "iters": 300, "title": "Joint refinement", "text": "Cameras are released too; contact and depth terms tie the objects to the scene.", "nodes": ["fwd", "sum"], "vars": ["v_pose", "v_shape", "v_cam", "v_scale"], "terms": {"e_2d": 1.0, "e_prior": 0.04, "e_smooth": 5, "e_contact": 2.0, "e_depth": 0.5}}
+  ]
+}
+</script>
+    </div>
+  </figure>
+</section>
+
+<!-- ═════════════ 3. BEYOND THE FIGURES ═════════════ -->
+<section id="method">
+  <h2>What the figures leave out: a set loss, a two-phase recipe and two paper-vs-code differences</h2>
+
+  <h3>Losses</h3>
+  <p>Training first matches predictions to ground-truth objects one to one, with the Hungarian algorithm, and only then computes the losses. A query left without a match is trained to answer “no object”, which is why no duplicate removal is needed at test time.</p>
+  <!-- guide §3.5 math: display math in .math-block, inline in .math; escape < > & in HTML -->
+  <span class="math-block">\mathcal{L} = \mathcal{L}_{match}\big(Q_L\big) + \sum_{l=1}^{L-1} \mathcal{L}_{aux}\big(Q_l\big),\qquad \lambda_{cls} = 2,\ \lambda_{box} = 5</span>
+  <ul>
+    <li><b>Class:</b> cross-entropy over C classes plus “no object” <span class="math">\varnothing</span>, with the <span class="math">\varnothing</span> weight lowered to 0.1.</li>
+    <li><b>Box:</b> L1 on normalised box coordinates <span class="math">\lVert b_i - \hat b_{\sigma(i)} \rVert_1</span>, only for matched queries.</li>
+    <li><b>3D position:</b> L1 on the object centre in the camera frame (weight 1.0), only for objects with 3D labels.</li>
+    <li><b>Auxiliary:</b> <span class="math">\mathcal{L}_{aux}</span> repeats the same loss after every earlier decoder layer, through the shared head.</li>
+  </ul>
+
+  <h3>Training recipe</h3>
+  <p>Two phases. First 50 epochs on the synthetic set with the encoder frozen and the neck, decoder, head and queries trained; then 10 epochs on the real set at a 10× lower learning rate. AdamW, learning rate 1e-4 (1e-5 for the neck), weight decay 1e-4, batch 32, gradient clipping at 0.1. Training time and hardware are <span class="tag">not stated</span>.</p>
+
+  <!-- guide §3.5 callout ne-box: every paper/code difference, again in one list -->
+  <div class="callout ne-box">
+    <p class="callout-title">Where the paper and the released code differ</p>
+    <ul>
+      <li><b>Decoder depth</b> is 8 layers in the released config, not 6. <span class="ev">p.4</span> <span class="ev code">configs/default.yaml:31</span></li>
+      <li><b>The matching cost</b> includes a generalised-IoU term with weight 2, absent from Eq. 3. <span class="ev">Eq.3</span> <span class="ev code">src/losses.py:47</span></li>
+    </ul>
+  </div>
+
+  <h3>Inference details that matter</h3>
+  <!-- guide §3.5 keylist -->
+  <ul class="keylist">
+    <li><span class="k">The score threshold replaces non-maximum suppression.</span> A query is kept if its best class is not “no object” and its score is at least 0.5. Lowering it to 0.3 raises recall but adds duplicates (Fig. 5).</li>
+    <li><span class="k">Frames are independent in the single pass.</span> Nothing is carried from one frame to the next, so objects are not tracked and may flicker. Only the refinement links the frames.</li>
+    <li><span class="k">The 3D position needs a focal length.</span> The code assumes a 60° field of view when none is given; the paper does not say what was used for evaluation.</li>
+  </ul>
+
+  <!-- guide §3.5 details.more for long material -->
+  <details class="more">
+    <summary>Inference, step by step (code order)</summary>
+    <ol>
+      <li>Resize the frame to a long side of 518 px and normalise it.</li>
+      <li>Frozen encoder → features at layers 6, 12, 18 and 24; neck → <span class="math">F'</span>: N×256.</li>
+      <li>Decoder: 100 learned queries <span class="math">Q_0</span> attend to each other and to <span class="math">F'</span>, 8 layers in the released config.</li>
+      <li>Head → class logits, 2D box and 3D position per query.</li>
+      <li>Keep queries with a score of at least 0.5 that are not “no object”; no suppression step.</li>
+      <li>Optional, per video: run the three-stage refinement of Section 2.</li>
+    </ol>
+  </details>
+</section>
+
+<!-- ═════════════ 4. EXPERIMENTS ═════════════ -->
+<section id="experiments">
+  <h2>Best AP among single-pass methods, close to a baseline that is given the boxes</h2>
+
+  <!-- guide §3.6 datasets: training data first -->
+  <h3>Training data: one synthetic set, one small real set, one inherited pretraining</h3>
+  <div class="datasets">
+    <div class="ds">
+      <div class="ds-name">Synthetic set A<small>trained on</small></div>
+      <div>
+        <div class="ds-tags"><span class="tag synthetic">synthetic</span><span class="tag">≈ 200k images</span><span class="tag">10 classes</span><span class="tag">2D + 3D labels</span></div>
+        <p>Rendered indoor scenes. Labels used: class, 2D box and 3D centre of every object.</p>
+      </div>
+    </div>
+    <div class="ds">
+      <div class="ds-name">Real set B<small>fine-tuned on</small></div>
+      <div>
+        <div class="ds-tags"><span class="tag">12k images</span><span class="tag">2D boxes only</span></div>
+        <p>Real photos with 2D boxes and classes; the 3D position loss is off for this set.</p>
+      </div>
+    </div>
+    <div class="ds">
+      <div class="ds-name">Encoder weights<small>inherited, frozen</small></div>
+      <div>
+        <div class="ds-tags"><span class="tag inherited">pretrained</span><span class="tag">self-supervised</span><span class="tag">data not stated in this paper</span></div>
+        <p>All image understanding below the neck comes from this checkpoint.</p>
+      </div>
+    </div>
+  </div>
+  <!-- guide §3.6 stacked bar: widths are percentages that sum to 100 -->
+  <p class="caption" style="margin-top:0">What MethodName trains itself (parameter counts computed from the code; the paper gives none):</p>
+  <div class="wide" style="max-width:720px;margin-bottom:1.6rem">
+    <div class="stack e-human" role="img" aria-label="Trainable parameters, 41.2 M in total">
+      <span style="width:47.57%" class="hot"></span><span style="width:30.10%"></span><span style="width:16.50%"></span><span style="width:5.83%"></span>
+    </div>
+    <div class="stack-key"><span><b>19.6 M</b> decoder</span><span><b>12.4 M</b> neck</span><span><b>6.8 M</b> head</span><span><b>2.4 M</b> queries + other</span><span><b>41.2 M</b> total</span></div>
+  </div>
+
+  <!-- guide §3.6 KPIs: 3-4 per row, always wide -->
+  <h3>Headline numbers</h3>
+  <div class="kpis wide">
+    <div class="kpi"><strong>45.6 %</strong><span><span data-term="AP">AP</span> on Benchmark X, best in the table (Baseline B 44.9 with ground-truth boxes)</span></div>
+    <div class="kpi"><strong>0.67</strong><span><span data-term="F1">F1</span> on Benchmark Y, best; precision is second to Baseline B</span></div>
+    <div class="kpi"><strong>12 FPS</strong><span>single pass; the refinement adds ≈ 40 s per 100-frame video</span></div>
+  </div>
+
+  <!-- guide §3.7 tabs: ids unique on the page -->
+  <div class="tabs wide" data-tabs>
+    <div class="tablist" role="tablist" aria-label="Result tables">
+      <button type="button" role="tab" id="tab-main" aria-controls="tp-main" aria-selected="true">Main · Tab. 1</button>
+      <button type="button" role="tab" id="tab-abl" aria-controls="tp-abl">Ablations · Tab. 3</button>
+      <button type="button" role="tab" id="tab-setup" aria-controls="tp-setup">Setup · Tab. 2</button>
+    </div>
+
+    <div role="tabpanel" id="tp-main" aria-labelledby="tab-main">
+      <p class="tp-lede">Benchmark X: <span data-term="AP">AP</span> and AP<sub>50</sub> (AP at IoU 0.5) in %, higher is better; <span data-term="Chamfer">Chamfer</span> in cm, lower is better. Benchmark Y: precision, recall and F1, higher is better. Bold = best and underline = second, as marked in the paper.</p>
+      <!-- guide §3.8 table: super-header blanks via colspan (never rowspan); sortable = th.num in the last header row -->
+      <div class="tbl-wrap">
+        <table class="data" data-sortable>
+          <thead>
+            <tr class="super"><th colspan="2"></th><th colspan="3">Benchmark X</th><th colspan="3">Benchmark Y</th></tr>
+            <tr>
+              <th scope="col">Group</th><th scope="col">Method</th>
+              <th scope="col" class="num"><span data-term="AP">AP</span> ↑</th><th scope="col" class="num">AP<sub>50</sub> ↑</th><th scope="col" class="num"><span data-term="Chamfer">Chamfer</span> ↓</th>
+              <th scope="col" class="num"><span data-term="Precision">Precision</span> ↑</th><th scope="col" class="num"><span data-term="Recall">Recall</span> ↑</th><th scope="col" class="num"><span data-term="F1">F1</span> ↑</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>two-stage</td><th scope="row">Baseline A</th><td class="num">38.2</td><td class="num">57.9</td><td class="num">4.81</td><td class="num">0.71</td><td class="num">0.52</td><td class="num">0.60</td></tr>
+            <tr data-flag="Uses ground-truth 2D boxes at test time."><td>two-stage</td><th scope="row">Baseline B</th><td class="num second">44.9</td><td class="num best">65.3</td><td class="num second">3.95</td><td class="num best">0.76</td><td class="num">0.57</td><td class="num second">0.65</td></tr>
+            <tr><td>two-stage</td><th scope="row">Baseline C</th><td class="num">41.7</td><td class="num">61.0</td><td class="num">4.12</td><td class="num">0.69</td><td class="num second">0.58</td><td class="num">0.63</td></tr>
+            <tr class="sep"><td>single-pass</td><th scope="row">Baseline D</th><td class="num">36.5</td><td class="num">55.3</td><td class="num">5.02</td><td class="num">0.64</td><td class="num">0.49</td><td class="num">0.56</td></tr>
+            <tr><td>single-pass</td><th scope="row">Baseline E</th><td class="num">40.3</td><td class="num">60.2</td><td class="num">4.40</td><td class="num">0.70</td><td class="num">0.55</td><td class="num">0.62</td></tr>
+            <tr class="ours"><td>single-pass</td><th scope="row">MethodName</th><td class="num best">45.6</td><td class="num second">64.8</td><td class="num best" data-v="3.71">3.71†</td><td class="num second">0.74</td><td class="num best">0.62</td><td class="num best">0.67</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="tbl-note"><span class="flag" aria-hidden="true"></span>marks a row whose comparison has a caveat; hover or tap it for the reason. Click a numeric header to sort; a third click restores the paper's order. † with the per-video refinement; the single pass gives 3.98 (Tab. 3).</p>
+    </div>
+
+    <div role="tabpanel" id="tp-abl" aria-labelledby="tab-abl">
+      <p class="tp-lede">Benchmark X, single pass (no refinement). AP in %, higher is better; Chamfer in cm, lower is better; FPS higher is better. Each row changes one thing from the full model.</p>
+      <div class="tbl-wrap" style="max-width:640px">
+        <table class="data" data-sortable>
+          <thead><tr><th scope="col">Variant (Tab. 3)</th><th scope="col" class="num"><span data-term="AP">AP</span> ↑</th><th scope="col" class="num"><span data-term="Chamfer">Chamfer</span> ↓</th><th scope="col" class="num"><span data-term="FPS">FPS</span> ↑</th></tr></thead>
+          <tbody>
+            <tr class="ours"><th scope="row">Full model</th><td class="num best">45.6</td><td class="num best">3.98</td><td class="num">12</td></tr>
+            <tr><th scope="row">Freeze the neck</th><td class="num">41.9</td><td class="num">4.37</td><td class="num">12</td></tr>
+            <tr><th scope="row">No auxiliary loss</th><td class="num">43.8</td><td class="num">4.05</td><td class="num">12</td></tr>
+            <tr><th scope="row">50 queries</th><td class="num">44.7</td><td class="num">4.02</td><td class="num">13</td></tr>
+            <tr><th scope="row">3 decoder layers</th><td class="num">42.6</td><td class="num">4.21</td><td class="num best">16</td></tr>
+            <tr><th scope="row">Fine-tune the encoder</th><td class="num">39.8</td><td class="num">4.66</td><td class="num">12</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="tbl-note">Fine-tuning the encoder on the small training sets hurts most (AP 45.6 → 39.8). The paper reports one run per row.</p>
+    </div>
+
+    <div role="tabpanel" id="tp-setup" aria-labelledby="tab-setup">
+      <p class="tp-lede">What each method needs at test time and what it was trained on, as stated in Tab. 2 of the paper.</p>
+      <!-- guide §3.8 text table: table.data.wrap lets td cells wrap -->
+      <div class="tbl-wrap">
+        <table class="data wrap">
+          <thead><tr><th scope="col">Method</th><th scope="col">Needs at test time</th><th scope="col">Trained on</th><th scope="col">Note</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Baseline A</th><td>image, region proposals</td><td>real set B</td><td>Two stages: proposals, then one classifier per region.</td></tr>
+            <tr><th scope="row">Baseline B</th><td>image, ground-truth 2D boxes</td><td>real set B</td><td>Only classifies and lifts the given boxes, so it never misses an object; its recall is an upper bound, not a comparable number.</td></tr>
+            <tr><th scope="row">Baseline C</th><td>image, region proposals</td><td>synthetic set A, real set B</td><td>Same training data as MethodName.</td></tr>
+            <tr><th scope="row">Baseline D</th><td>image</td><td>real set B</td><td>Dense anchors with non-maximum suppression.</td></tr>
+            <tr><th scope="row">Baseline E</th><td>image</td><td>synthetic set A, real set B</td><td>Single pass; fine-tunes its whole encoder.</td></tr>
+            <tr class="ours"><th scope="row">MethodName</th><td>image (video for the refinement)</td><td>synthetic set A, real set B</td><td>Frozen encoder. The Chamfer value in Tab. 1 uses the per-video refinement; every other number is single pass.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- guide §3.10 bar charts: ablation deltas; say in the note when you computed them -->
+  <h3>What each component buys</h3>
+  <div class="two-col wide">
+    <div data-bars><script type="application/json">{"title": "Benchmark X AP drops by (points)", "unit": "", "max": 6, "items": [
+      {"label": "Fine-tune the encoder instead of freezing it", "value": 5.8, "display": "−5.8", "e": "scene", "group": "carry", "src": "Tab.3"},
+      {"label": "Freeze the neck", "value": 3.7, "display": "−3.7", "e": "scene", "group": "carry", "src": "Tab.3"},
+      {"label": "3 decoder layers instead of 6", "value": 3.0, "display": "−3.0", "e": "human", "group": "carry", "src": "Tab.3"},
+      {"label": "Drop the auxiliary loss", "value": 1.8, "display": "−1.8", "e": "human", "group": "minor", "src": "Tab.3"},
+      {"label": "50 queries instead of 100", "value": 0.9, "display": "−0.9", "e": "human", "group": "minor", "src": "Tab.3"}],
+      "note": "Full model = 45.6 AP, single pass. Differences computed here from Tab. 3, not reported by the authors."}</script></div>
+    <div data-bars><script type="application/json">{"title": "Benchmark X Chamfer gets worse by (cm)", "unit": "", "max": 0.7, "items": [
+      {"label": "Fine-tune the encoder instead of freezing it", "value": 0.68, "display": "+0.68", "e": "scene", "group": "carry", "src": "Tab.3"},
+      {"label": "Freeze the neck", "value": 0.39, "display": "+0.39", "e": "scene", "group": "carry", "src": "Tab.3"},
+      {"label": "3 decoder layers instead of 6", "value": 0.23, "display": "+0.23", "e": "human", "group": "carry", "src": "Tab.3"},
+      {"label": "Drop the auxiliary loss", "value": 0.07, "display": "+0.07", "e": "human", "group": "minor", "src": "Tab.3"},
+      {"label": "50 queries instead of 100", "value": 0.04, "display": "+0.04", "e": "human", "group": "minor", "src": "Tab.3"}],
+      "note": "Full model = 3.98 cm, single pass. Differences computed here from Tab. 3."}</script></div>
+  </div>
+
+  <!-- guide §3.11 paper figures: one column, full width; width/height = the file's real pixel size -->
+  <h3>Results in the paper's own figures</h3>
+  <div class="paper-figs wide">
+    <figure>
+      <a href="assets/placeholder_figure.svg" data-lightbox><img src="assets/placeholder_figure.svg" alt="Say concretely what is in the image: which scenes, which objects, what is overlaid." loading="lazy" width="2400" height="900"></a>
+      <figcaption>What to look at in this figure. <span class="credit">Fig. 4 of Author et al., Venue Year.</span></figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ═════════════ 5. CRITICAL ANALYSIS ═════════════ -->
+<section id="analysis">
+  <h2>The frozen encoder and the fine-tuned neck carry the method; the extra losses add little</h2>
+  <p>Read against its own ablations, MethodName's accuracy comes mostly from not disturbing a strong pretrained encoder and from adapting its features with a fine-tuned neck. The learned queries make the single pass possible, but no ablation replaces them with anchors, so their own contribution to accuracy is not measured.</p>
+
+  <!-- guide §3.12 verdict: carries vs minor, grounded in ablation numbers -->
+  <div class="verdict wide">
+    <div class="col-carry">
+      <h3>What carries the method</h3>
+      <ol>
+        <li><span class="weight">main</span><b>Keeping the encoder frozen.</b> Fine-tuning it on the small training sets drops AP from 45.6 to 39.8 and worsens Chamfer from 3.98 to 4.66 cm. <span class="ev">Tab.3</span></li>
+        <li><span class="weight">main</span><b>A fine-tuned neck and a deep enough decoder.</b> Freezing the neck costs 3.7 AP; 3 decoder layers instead of 6 cost 3.0 AP. <span class="ev">Tab.3</span></li>
+      </ol>
+    </div>
+    <div class="col-minor">
+      <h3>Minor additions</h3>
+      <ul>
+        <li><span class="weight low">minor</span><b>Auxiliary loss:</b> 43.8 → 45.6 AP. <span class="ev">Tab.3</span></li>
+        <li><span class="weight low">minor</span><b>100 queries instead of 50:</b> +0.9 AP at one FPS less. <span class="ev">Tab.3</span></li>
+        <li><span class="weight low">untested</span><b>Per-video refinement:</b> improves Chamfer (3.98 → 3.71 cm); its stages and energy terms are not ablated. <span class="ev">Tab.1</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Limitations the authors state</h3>
+  <ul>
+    <li>Heavily occluded objects are often missed. <span class="ev">p.8</span> <span class="ev">Fig.6</span></li>
+    <li>A closed set of 10 classes; new classes need retraining. <span class="ev">p.8</span></li>
+    <li>The refinement assumes a static scene with a ground plane. <span class="ev">p.9</span></li>
+  </ul>
+
+  <!-- guide §3.12 issues: numbered automatically; evidence chip on every point, .spec after your own inference -->
+  <h3>What the paper does not show</h3>
+  <ol class="issues">
+    <li><b>The closest baseline is given the answer.</b> Baseline B uses ground-truth 2D boxes at test time, yet the paper ranks it in the same table without a note; MethodName beats it on AP by only 0.7. <span class="ev">Tab.1</span> <span class="ev">Tab.2</span></li>
+    <li><b>The 3D comparison mixes settings.</b> The best Chamfer in Tab. 1 uses the per-video refinement; every baseline is single pass. The single-pass value (3.98) is only in the ablation table. <span class="ev">Tab.1</span> <span class="ev">Tab.3</span></li>
+    <li><b>One run per number.</b> No seeds or variance are reported, so the gaps under 1 AP in the ablations may be noise. <span class="spec">speculation</span> <span class="ev">Tab.3</span></li>
+    <li><b>The released model may differ from the evaluated one.</b> The released config has 8 decoder layers, the paper 6, and the matching cost has an extra term. <span class="ev">p.4</span> <span class="ev code">configs/default.yaml:31</span></li>
+  </ol>
+
+  <h3>Open questions</h3>
+  <ul>
+    <li>How much of the gain comes from the learned queries themselves? An anchor-based decoder on the same frozen encoder and neck would answer it.</li>
+    <li>Does the frozen encoder still win when the training set is ten times larger?</li>
+    <li>Can the refinement's camera and scale terms be predicted in the single pass instead of optimized?</li>
+  </ul>
+</section>
+</main>
+</div>
+
+<!-- AUTHOR: prev/next = neighbouring pages in reading order; the first page's prev and the last page's next point to index.html ("All papers"). Never leave href="#". -->
+<footer class="pager">
+  <a href="prevslug2025.html" data-prev><small>← Previous paper</small>PrevMethod</a>
+  <a href="index.html"><small>All papers</small>Index and comparison</a>
+  <a href="nextslug2026.html" data-next style="text-align:right"><small>Next paper →</small>NextMethod</a>
+</footer>
+
+<!-- guide §3.9 glossary: add or override keys used by data-term -->
+<script type="application/json" id="glossary">
+{
+  "AP": "Average precision, in %, averaged over IoU thresholds 0.5 to 0.95 and over classes. Higher is better."
+}
+</script>
+<!-- entity names for the diagram legends (site.js, guide §1): delete for human/scene papers; slots: human scene camera contact robot neutral.
+     On a page with two diagrams every name must be true for every node of that colour in both. -->
+<script type="application/json" id="entities">
+{"human": "objects", "scene": "image features, depth", "camera": "cameras, scale"}
+</script>
+<!-- page labels (site.js): time unit of the storyboard status and step narration (default frame), plus three legend labels.
+     This page keeps unit frame and sets only what its legends need: the one recurrent edge (the stage timeline's update
+     loop) runs per iteration, and the geometry edges carry boxes and poses. Delete the block when the defaults are true. -->
+<script type="application/json" id="labels">
+{"rec": "recurrent: carried to the next iteration", "geom": "geometry: boxes, poses"}
+</script>
+<!-- e.g. for an LLM paper, unit token:
+<script type="application/json" id="labels">
+{"unit": "token", "units": "tokens", "optimized": "optimized per prompt", "rec": "carried to the next token", "geom": "structured outputs: boxes, masks"}
+</script>
+-->
+</body>
+</html>
