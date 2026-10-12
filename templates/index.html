@@ -15,7 +15,7 @@
 <style>
 /* page-local styles for the index (prefix ix- / fm-); tokens from site.css only */
 .ix-lede { font-size: 1.05rem; line-height: 1.6; max-width: 46em; margin: 0 0 1rem; }
-.ix-how { font-size: .95rem; color: var(--muted); max-width: 46em; margin: 0 0 1.6rem; }
+.ix-how { font-size: .95rem; color: var(--muted); margin: 0 0 1.6rem; }
 
 /* family map */
 .fm-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem .6rem; margin-bottom: .7rem; }
@@ -164,7 +164,8 @@ table.ix-bench td.na { color: var(--faint); text-align: center; }
   <!-- FILL: say why this reading order. -->
   <h2>The five papers, in reading order</h2>
   <p>The order follows the family map: the optimization methods first, then the feed-forward models, and the benchmark last. Each page links to the next one.</p>
-  <div class="ix-cards wide" id="ix-cards"></div>
+  <!-- cards are narrow boxes: no-justify keeps their text left-aligned (guide §2) -->
+  <div class="ix-cards wide no-justify" id="ix-cards"></div>
 </section>
 
 <!-- ═════════════ 3. COMPARISON TABLE (generated from #collection; site.js sorts it) ═════════════ -->
@@ -185,7 +186,7 @@ table.ix-bench td.na { color: var(--faint); text-align: center; }
   <p>Where several papers evaluate on the same benchmark, the table lists the number each paper prints for <em>itself</em>, with the table it comes from. Empty cells mean the paper does not report that benchmark.</p>
   <!-- FILL: name the concrete protocol differences (frame rate, split, input given, alignment, training on the test domain)
        and any baseline that appears with different numbers in different papers. Keep this box: it is the caveat. -->
-  <div class="callout ne-box wide"><p class="callout-title">Not a leaderboard: protocols differ, so read rows as claims</p>
+  <div class="callout ne-box"><p class="callout-title">Not a leaderboard: protocols differ, so read rows as claims</p>
     <p>The same metric name hides different protocols. Method A optimizes on each test sequence (test-time optimization), Method C trains on the training split of Benchmark Q, and Method D is given ground-truth camera intrinsics that the others estimate. Method B evaluates Benchmark P on a subset of 20 sequences. Baselines drift too: Method A appears as 41.2 in its own paper and as 43.0 in Method D's table <span class="ev">Method A Tab.2, Method D Tab.2</span>.</p></div>
   <div class="tbl-wrap wide">
     <!-- One row per paper that reports at least one shared benchmark. Super-header: blank cells via colspan, never rowspan.

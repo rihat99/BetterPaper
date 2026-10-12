@@ -129,8 +129,9 @@ PYEOF
 )
 [ -n "$missing" ] && echo "$missing"
 
-# Console check: only lines from the page (CONSOLE ..., Uncaught ...); Chrome's own log lines are noise.
-console=$("$CHROME" --headless=new --disable-gpu $SANDBOX --enable-logging=stderr --v=0 --virtual-time-budget=8000 \
+# Console check at a 1280 px window (site.js checks text sizes only at desktop width): only lines from the page
+# (CONSOLE ..., Uncaught ...); Chrome's own log lines are noise.
+console=$("$CHROME" --headless=new --disable-gpu $SANDBOX --enable-logging=stderr --v=0 --virtual-time-budget=8000 --window-size=1280,900 \
   --dump-dom "file://$PAGE" 2>&1 >/dev/null | grep -E "CONSOLE|Uncaught")
 if [ -z "$console" ]; then echo "console: clean"; else echo "console: $(echo "$console" | wc -l | tr -d ' ') message(s)"; echo "$console"; fi
 [ -z "$missing$console" ] || exit 1

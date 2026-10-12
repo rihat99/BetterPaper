@@ -38,9 +38,14 @@
   --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", -apple-system, Roboto, Helvetica, Arial, sans-serif;
   --font-body: "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --measure: 70ch;
+  /* one centered axis: the reading column (text, small figures, narrow tables) and the wide column (Figures 1 and 2,
+     wide tables, large paper figures). --out is the negative inline margin that takes a block from the reading column
+     to the wide column; 100cqw is the width inside .layout, so both columns shrink together on small screens. */
+  --read: 760px;
   --wide: 1150px;
-  --toc-w: 190px;
+  --out: calc((min(100cqw, var(--read)) - min(100cqw, var(--wide))) / 2);
+  --measure: var(--read);   /* older name, still used by page-local rules */
+  --toc-w: 160px;
   --gutter: 24px;
   --r: 8px;
 }
@@ -88,7 +93,7 @@ strong { font-weight: 600; }
 /* ───────────────────────── page layout ───────────────────────── */
 .topbar {
   display: flex; justify-content: space-between; align-items: center; gap: 1rem;
-  max-width: calc(var(--wide) + var(--toc-w) + 3rem + 2 * var(--gutter));
+  max-width: calc(var(--wide) + 2 * var(--gutter));
   margin: 0 auto; padding: .9rem var(--gutter) 0;
   font-size: .9rem;
 }
@@ -104,26 +109,43 @@ strong { font-weight: 600; }
 .btn:disabled { opacity: .45; cursor: default; }
 .btn svg { width: 12px; height: 12px; fill: currentColor; }
 
-.layout {
-  max-width: calc(var(--wide) + var(--toc-w) + 3rem + 2 * var(--gutter));
-  margin: 0 auto; padding: 0 var(--gutter) 3rem;
-}
-main > section { margin: 0 0 4.5rem; scroll-margin-top: 16px; }
-main > section > *:not(.wide) { max-width: var(--measure); }
+/* The header, the collapsed TOC, every section and every tab panel are the reading column, centered.
+   A .wide block that is a direct child of one of them breaks out to the wide column on the same axis.
+   Tables do this on their own (site.js adds .wide when a table does not fit the reading column). */
+.layout { padding: 0 var(--gutter) 3rem; container-type: inline-size; }
+main > section { max-width: var(--read); margin: 0 auto 4.5rem; scroll-margin-top: 16px; }
+main > section > .wide, [role="tabpanel"] > .wide, .ph > .glance { margin-left: var(--out); margin-right: var(--out); }
 .wide { max-width: var(--wide); }
+/* tabs: strip and panels stay in the reading column even on a .tabs.wide block; wide tables inside break out */
+.tabs > .tablist, .tabs > [role="tabpanel"] { max-width: var(--read); margin-left: auto; margin-right: auto; }
+/* inside a wide block, .read puts one child back on the reading column (e.g. a tall paper figure) */
+.wide > .read { max-width: var(--read); margin-left: auto; margin-right: auto; }
 
-@media (min-width: 1440px) {
+/* wide screens: the TOC becomes a sticky sidebar in the left margin; the axis does not move */
+@media (min-width: 1600px) {
   .layout {
-    display: grid; grid-template-columns: var(--toc-w) minmax(0, 1fr); column-gap: 3rem;
-    grid-template-areas: "toc head" "toc main";
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, var(--wide)) minmax(0, 1fr);
+    grid-template-areas: "toc head ." "toc main .";
   }
   .layout > .ph { grid-area: head; }
   .layout > .toc { grid-area: toc; }
   .layout > main { grid-area: main; min-width: 0; }
 }
 
+/* ───────────────────────── justified prose ───────────────────────── */
+/* Running prose is justified and hyphenated (pages are lang="en"). Left-aligned instead: headings, tables, UI
+   (chips, buttons, tabs, legends, controls) and boxes narrower than ~320 px, where justify opens big gaps.
+   Add .no-justify to any other narrow box (cards, small panels). */
+.layout { text-align: justify; -webkit-hyphens: auto; hyphens: auto; hyphenate-limit-chars: 6 3 3; }
+h1, h2, h3, h4, h5, table, pre, code, kbd, button, .btn, .chip, .tag, .ev, .ne, .spec, .math,
+.toc, .ph-kicker, .ph-title, .ph-authors, .ph-links, .glance, .fig-head, .fig-title, .callout-title, .legend,
+.story-step, .story-notes, .world, .arch-bar, .arch-narr, .arch-detail, .arch-timeline, .arch-hint, .stage-mat,
+.tablist, .kpis, .ds-name, .ds-tags, .bars, .stack-key, .pop, .no-justify {
+  text-align: left; -webkit-hyphens: manual; hyphens: manual;
+}
+
 /* ───────────────────────── header ───────────────────────── */
-.ph { padding: 2.2rem 0 2.6rem; max-width: var(--wide); }
+.ph { padding: 2.2rem 0 2.6rem; max-width: var(--read); margin: 0 auto; }
 .ph-kicker { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; font-size: .85rem; color: var(--muted); margin-bottom: .9rem; }
 .ph h1 { font-size: clamp(2.4rem, 6vw, 3.6rem); margin: 0; letter-spacing: -0.03em; line-height: 1.02; }
 .ph-title { font-family: var(--font-display); font-size: clamp(1.15rem, 2.4vw, 1.45rem); font-weight: 500; margin: .45rem 0 .7rem; max-width: 40em; color: var(--text); }
@@ -148,7 +170,7 @@ main > section > *:not(.wide) { max-width: var(--measure); }
 }
 
 /* ───────────────────────── table of contents ───────────────────────── */
-.toc { font-size: .9rem; margin: 0 0 2.5rem; }
+.toc { font-size: .9rem; max-width: var(--read); margin: 0 auto 2.5rem; }
 .toc details { border: 1px solid var(--border); border-radius: var(--r); background: var(--surface); padding: .55rem .9rem; }
 .toc summary { cursor: pointer; font-weight: 600; color: var(--text); }
 .toc ol { list-style: none; padding: 0; margin: .5rem 0 .2rem; }
@@ -157,8 +179,8 @@ main > section > *:not(.wide) { max-width: var(--measure); }
 .toc a:hover { color: var(--text); }
 .toc a.is-active { color: var(--text); font-weight: 600; border-left-color: var(--accent); }
 .toc .toc-num { font-family: var(--font-mono); font-size: .78rem; color: var(--faint); margin-right: .35rem; }
-@media (min-width: 1440px) {
-  .toc { position: sticky; top: 1.2rem; align-self: start; margin: 2.4rem 0 0; max-height: calc(100vh - 2.4rem); overflow-y: auto; }
+@media (min-width: 1600px) {
+  .toc { position: sticky; top: 1.2rem; align-self: start; justify-self: end; width: var(--toc-w); margin: 2.4rem 2rem 0 0; max-height: calc(100vh - 2.4rem); overflow-y: auto; }
   .toc details { border: 0; background: none; padding: 0; }
   .toc summary { list-style: none; font: 600 .72rem/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); cursor: default; pointer-events: none; }
   .toc summary::-webkit-details-marker { display: none; }
@@ -183,12 +205,16 @@ main > section > *:not(.wide) { max-width: var(--measure); }
 .chip.s-new { border-color: var(--accent); background: var(--accent-tint); }
 .chip.ours { border-color: var(--accent); }
 /* evidence chip: where a claim comes from (Tab.3, p.7, code path) */
+/* inline, not inline-block: punctuation after a chip stays on its line */
 .ev {
-  display: inline-block; font: 500 .74rem/1.3 var(--font-mono); color: var(--muted);
+  display: inline; font: 500 .74rem/1.3 var(--font-mono); color: var(--muted);
   border: 1px solid var(--border); background: var(--surface-2); border-radius: 4px;
   padding: .02rem .35rem; margin: 0 .1rem; white-space: nowrap; vertical-align: 1px;
 }
 .ev.code { color: var(--text); }
+/* in running prose a long chip may wrap (at spaces, or at the break points site.js adds to long code tokens),
+   so the justified line before it does not stretch */
+p .ev, li .ev, dd .ev, figcaption .ev { white-space: normal; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 .spec { font: 600 .68rem/1.3 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--warn); border: 1px dashed var(--warn); border-radius: 4px; padding: .02rem .3rem; white-space: nowrap; vertical-align: 1px; }
 .ne { font: 600 .72rem/1.3 var(--font-mono); color: var(--warn); background: var(--warn-tint); border: 1px solid var(--warn); border-radius: 4px; padding: .02rem .32rem; white-space: nowrap; vertical-align: 1px; }
 
@@ -198,9 +224,10 @@ main > section > *:not(.wide) { max-width: var(--measure); }
 /* ───────────────────────── figures and panels ───────────────────────── */
 figure { margin: 1.6rem 0 2.2rem; }
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.1rem 1.2rem 1rem; }
-figcaption, .caption { color: var(--muted); font-size: .9rem; line-height: 1.5; margin-top: .7rem; max-width: var(--measure); }
+/* a caption keeps the reading width and centers, so under a wide figure its edges match the body text */
+figcaption, .caption { color: var(--muted); font-size: .9rem; line-height: 1.5; margin-top: .7rem; max-width: var(--read); margin-left: auto; margin-right: auto; }
 .fig-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .6rem 1rem; margin-bottom: .8rem; }
-.fig-title { font: 600 .74rem/1.2 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.fig-title { font: 600 .75rem/1.2 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
 .controls { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
 .status { font: 500 .8rem/1.3 var(--font-mono); color: var(--muted); min-width: 9ch; }
 
@@ -223,6 +250,10 @@ figcaption, .caption { color: var(--muted); font-size: .9rem; line-height: 1.5; 
 .story-notes { display: flex; flex-direction: column; gap: .6rem; font-size: .86rem; line-height: 1.45; }
 .story-notes > div { border-top: 1px solid var(--border); padding-top: .55rem; }
 .story-notes b { font-weight: 600; }
+/* controls get their own row under the title, with Show all at the right end as in the diagram bar,
+   so no button moves while the status text changes */
+.story-controls { flex: 1 0 100%; }
+.story-controls > .story-all { margin-left: auto; }
 .story.is-playing .story-step:not(.is-current) { opacity: .4; }
 .story.is-playing .story-step.is-current .story-num { background: var(--accent); }
 @media (max-width: 1099px) { .story-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -230,9 +261,9 @@ figcaption, .caption { color: var(--muted); font-size: .9rem; line-height: 1.5; 
 @media (max-width: 560px) { .story-grid { grid-template-columns: 1fr; } }
 
 /* SVG vocabulary shared by hand-drawn figures (idea panels) */
-/* story panels use a 260×160 viewBox drawn at ≈1:1 on desktop: text 12, mono 11 is the floor */
+/* story panels use a 260×160 viewBox drawn at ≈1:1 on desktop: text and mono 12 px, the legibility floor */
 .fig-svg text { font-family: var(--font-body); font-size: 12px; fill: var(--text); }
-.fig-svg .t-mono { font-family: var(--font-mono); font-size: 11px; fill: var(--muted); }
+.fig-svg .t-mono { font-family: var(--font-mono); font-size: 12px; fill: var(--muted); }
 .fig-svg .t-muted { fill: var(--muted); }
 .fig-svg .t-e { fill: var(--e); font-weight: 600; }
 .fig-svg .tok { fill: var(--e-tint); stroke: var(--e); stroke-width: 1; }
@@ -285,13 +316,9 @@ figcaption, .caption { color: var(--muted); font-size: .9rem; line-height: 1.5; 
 .arch-svg { display: block; width: 100%; height: auto; overflow: visible; }
 .arch-hint { display: none; font-size: .78rem; color: var(--faint); margin: .3rem 0 0; }
 @media (max-width: 900px) { .arch-hint { display: block; } }
+/* the diagram stays in the wide column at every width; the detail panel sits below it */
 .arch-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
-@media (min-width: 1700px) {
-  .arch-wide { max-width: calc(var(--wide) + 22rem); }
-  .arch-body { grid-template-columns: minmax(0, 1fr) 20rem; }
-}
 .arch-detail { border-top: 1px solid var(--border); padding-top: .9rem; font-size: .92rem; line-height: 1.5; min-height: 6rem; }
-@media (min-width: 1700px) { .arch-detail { border-top: 0; border-left: 1px solid var(--border); padding: 0 0 0 1rem; } }
 .arch-detail h4 { font-family: var(--font-display); font-size: 1.1rem; margin: 0 0 .4rem; }
 .arch-detail .chips { display: flex; flex-wrap: wrap; gap: .3rem; margin-bottom: .6rem; }
 .arch-detail dl { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: .35rem .8rem; margin: 0; }
@@ -299,8 +326,8 @@ figcaption, .caption { color: var(--muted); font-size: .9rem; line-height: 1.5; 
 .arch-detail dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .arch-detail dd.paper { background: var(--warn-tint); border-radius: 6px; padding: .3rem .5rem; }
 .arch-detail .empty { color: var(--muted); }
-/* laptop: title + chips on the left, the detail rows on the right (no half-empty column) */
-@media (min-width: 761px) and (max-width: 1699px) {
+/* title + chips on the left, the detail rows on the right (no half-empty column) */
+@media (min-width: 761px) {
   .arch-detail.has-node { display: grid; grid-template-columns: 13rem minmax(0, 1fr); gap: 0 2rem; align-items: start; }
 }
 @media (max-width: 480px) { .arch-detail dl { grid-template-columns: 1fr; gap: .1rem; } .arch-detail dd { margin-bottom: .45rem; } }
@@ -374,11 +401,11 @@ figcaption, .caption { color: var(--muted); font-size: .9rem; line-height: 1.5; 
 .arch-svg.show-shapes .edge.has-shape .elab { display: none; }
 .arch-svg.show-shapes .edge .eshp { display: inline; }
 .arch-svg .particle { fill: var(--e); pointer-events: none; }
-.arch-svg .group rect { fill: none; stroke: var(--border-strong); stroke-width: 1; stroke-dasharray: 2 4; }
-.arch-svg .group text { fill: var(--muted); font: 600 13px var(--font-mono); letter-spacing: .04em; text-transform: uppercase; }
+.arch-svg .group > rect { fill: none; stroke: var(--border-strong); stroke-width: 1; stroke-dasharray: 2 4; }
+.arch-svg .group > text { fill: var(--muted); font: 600 13px var(--font-mono); letter-spacing: .04em; text-transform: uppercase; }
 
 /* step focus: highlighted parts stay, the rest fades but stays readable */
-.arch-svg.has-focus .node:not(.on), .arch-svg.has-focus .edge:not(.on), .arch-svg.has-focus .group { opacity: .22; }
+.arch-svg.has-focus .node:not(.on), .arch-svg.has-focus .edge:not(.on), .arch-svg.has-focus .group:not(.on) { opacity: .22; }
 .arch-svg.has-focus .node.on .box { stroke-width: 2.8; }
 .arch-svg.has-focus .node.on.s-loss .box { stroke: var(--text); }
 @media (prefers-reduced-motion: no-preference) {
@@ -399,8 +426,10 @@ details.more[open] > summary { margin-bottom: .5rem; }
 .keylist .k { font-weight: 600; }
 .two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem 2rem; }
 .three-col { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.2rem 1.8rem; }
+/* columns of justified text stay >= ~320 px: two-col fits the reading column, three-col needs the wide column
+   and drops to two columns below 1104 px */
 @media (max-width: 760px) { .two-col, .three-col { grid-template-columns: 1fr; } }
-@media (min-width: 761px) and (max-width: 1000px) { .three-col { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 761px) and (max-width: 1103px) { .three-col { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* math (KaTeX MathML output; raw LaTeX in mono if KaTeX is missing) */
 .math { font-family: var(--font-mono); font-size: .9em; }
@@ -443,7 +472,8 @@ math { font-size: 1.05em; }
 .stack-key { display: flex; flex-wrap: wrap; gap: .2rem 1rem; font-size: .8rem; color: var(--muted); margin-top: .4rem; }
 .stack-key b { color: var(--text); font-weight: 600; font-family: var(--font-mono); font-size: .78rem; }
 
-.kpis { display: flex; flex-wrap: wrap; gap: 1.2rem 2.4rem; margin: 1rem 0 1.4rem; }
+/* equal columns that fill the row, so the outer numbers sit on the column edges */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 1.2rem 2.4rem; margin: 1rem 0 1.4rem; }
 .kpi strong { display: block; font: 600 1.9rem/1.05 var(--font-display); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .kpi > span { color: var(--muted); font-size: .84rem; display: block; max-width: 15rem; line-height: 1.35; margin-top: .2rem; }
 
@@ -502,7 +532,7 @@ dialog.lightbox p { font-size: .85rem; color: var(--muted); margin: .6rem 0 0; m
 dialog.lightbox .close { position: absolute; top: .4rem; right: .4rem; }
 
 /* ───────────────────────── critical analysis ───────────────────────── */
-.verdict { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 1.4rem 2.4rem; margin: 1.2rem 0 1.6rem; }
+.verdict { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.4rem 2.4rem; margin: 1.2rem 0 1.6rem; }
 .verdict h3 { margin-top: 0; font-size: 1.05rem; }
 .verdict .col-minor { color: var(--muted); }
 .verdict .col-minor h3 { color: var(--text); }
@@ -517,7 +547,8 @@ dialog.lightbox .close { position: absolute; top: .4rem; right: .4rem; }
 .issues > li > b:first-child { display: block; margin-bottom: .15rem; }
 
 /* ───────────────────────── footer pager ───────────────────────── */
-.pager { max-width: calc(var(--wide) + var(--toc-w) + 3rem + 2 * var(--gutter)); margin: 0 auto; padding: 1.5rem var(--gutter) 3rem; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; border-top: 1px solid var(--border); font-size: .92rem; }
+/* the rule spans exactly the wide column */
+.pager { width: calc(100% - 2 * var(--gutter)); max-width: var(--wide); margin: 0 auto; padding: 1.5rem 0 3rem; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; border-top: 1px solid var(--border); font-size: .92rem; }
 .pager a { text-decoration: none; color: var(--text); }
 .pager a:hover { text-decoration: underline; }
 .pager small { display: block; color: var(--muted); font-size: .78rem; }

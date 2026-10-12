@@ -7,6 +7,7 @@
      tooltips/glossary ... [data-tip], [data-term], <script id="glossary">
      tabs ................ [data-tabs]
      sortable tables ..... table[data-sortable], tr[data-flag]
+     table width ......... .tbl-wrap gets .wide when its table does not fit the reading column
      lightbox ............ a[data-lightbox]
      bar chart ........... [data-bars] + JSON
      architecture ........ [data-arch] + JSON (nodes, edges, steps, stages)
@@ -15,6 +16,7 @@
      world widget ........ [data-world] + JSON
      storyboard player ... [data-story]
      pager ............... a[data-prev], a[data-next]
+     page standard ....... "[standard]" console warnings for the storyboard, diagram and lede rules
    Public API: window.PaperPage (renderMath, worlds, archs). */
 (function () {
   'use strict';
@@ -130,7 +132,7 @@
     if (!toc) return;
     var det = $('details', toc);
     if (det && window.matchMedia) {
-      var wide = window.matchMedia('(min-width: 1440px)');
+      var wide = window.matchMedia('(min-width: 1600px)');
       var sync = function () { det.open = wide.matches; };
       sync();
       if (wide.addEventListener) wide.addEventListener('change', sync);
@@ -358,6 +360,44 @@
     });
   }
 
+  /* A table in the reading column that would scroll sideways there gets .wide and so breaks out to the wide column.
+     It is measured on a hidden copy (its tab panel may be hidden) against the design width --read, so the result does
+     not depend on the window, and again once the web fonts are in. A .tbl-wrap marked .wide in the page stays wide. */
+  function initTableWidth() {
+    var read = parseFloat(getComputedStyle(root).getPropertyValue('--read'));
+    var host = $('main');
+    var wraps = $$('main > section > .tbl-wrap, [role="tabpanel"] > .tbl-wrap').filter(function (w) {
+      return !w.classList.contains('wide') && w.querySelector('table');
+    });
+    if (!read || !host || !wraps.length) return;
+    function measure() {
+      var probe = h('div', { 'aria-hidden': 'true', style: 'position:absolute;left:-99999px;top:0;width:0;visibility:hidden' });
+      host.appendChild(probe);
+      wraps.forEach(function (w) {
+        var copy = w.querySelector('table').cloneNode(true);
+        copy.removeAttribute('id');
+        probe.appendChild(copy);
+        // in a zero-width box the table takes its narrowest possible width; +2 for the wrap's border
+        w.classList.toggle('wide', copy.offsetWidth + 2 > read);
+        probe.removeChild(copy);
+      });
+      host.removeChild(probe);
+    }
+    measure();
+    if (doc.fonts && doc.fonts.ready) doc.fonts.ready.then(function () { run('table width', measure); });
+  }
+
+  /* Justified prose: a long code path or identifier is one unbreakable word, so the line before it stretches. Long code
+     tokens get break points after / : = , and before . _ (as with long URLs). Tables, code blocks and diagrams keep
+     theirs whole. */
+  function initCodeBreaks() {
+    $$('main code, main .ev.code').forEach(function (el) {
+      if (el.children.length || el.textContent.length < 14 || el.closest('table, pre, .arch, .no-justify')) return;
+      // three characters before a break and four after it, so no line starts with a lone "309" or ".py"
+      el.innerHTML = esc(el.textContent).replace(/(\S{2}[\/:=,])(?=\S{4})/g, '$1<wbr>').replace(/(\S{3})([._])(?=\S{3})/g, '$1<wbr>$2');
+    });
+  }
+
   /* ─────────── lightbox ─────────── */
   function initLightbox() {
     var links = $$('a[data-lightbox]');
@@ -410,7 +450,7 @@
   }
 
   /* ─────────── architecture diagram ─────────── */
-  var STATE_TXT = { frozen: 'frozen, pretrained', finetuned: 'fine-tuned', trained: 'trained from scratch', optimized: 'optimized per input', unstated:'training not stated', op: 'no learned parameters', data: 'data', loss: 'loss or energy term' };
+  var STATE_TXT = { frozen: 'frozen, pretrained', finetuned: 'fine-tuned', trained: 'trained from scratch', optimized: 'optimized per input', unstated:'training or initialization not stated', op: 'no learned parameters', data: 'data', loss: 'loss or energy term' };
   var ENTITY_TXT = { human: 'human', scene: 'scene', camera: 'camera', contact: 'contact', robot: 'robot', neutral: 'other' };
   /* <script type="application/json" id="entities">{"human": "query tokens"}</script> renames entity slots for this page
      (legend and detail chips); colors stay. An unknown key is a typo, so it is reported. */
@@ -448,7 +488,7 @@
     if (!Object.prototype.hasOwnProperty.call(table, value)) console.warn('[site.js] ' + kind + ' "' + id + '": unknown ' + key + ' "' + value + '"; allowed: ' + Object.keys(table).join(', '));
   }
   var GLYPH = { frozen: 'g-lock', finetuned: 'g-half', trained: 'g-dot', optimized: 'g-cycle' };
-  var DETAIL_ROWS = [['does', 'What it does'], ['in', 'In'], ['out', 'Out'], ['params', 'Params'], ['train', 'Training'], ['eq', 'Equation'], ['code', 'Code'], ['paper', 'Paper ≠ code']];
+  var DETAIL_ROWS = [['does', 'What it does'], ['in', 'In'], ['out', 'Out'], ['why', 'Why'], ['params', 'Params'], ['train', 'Training'], ['eq', 'Equation'], ['code', 'Code'], ['paper', 'Paper ≠ code']];
 
   function roundedPath(pts, r) {
     var d = 'M' + pts[0][0] + ' ' + pts[0][1];
@@ -489,12 +529,122 @@
     return { x: (p[0] + q[0]) / 2 + 6, y: (p[1] + q[1]) / 2 + 4, anchor: 'start' };
   }
 
-  function Arch(host) {
+  /* ─────────── page standard: the numeric figure rules, one console.warn line per violation ─────────── */
+  /* check_page.sh fails on any console line, so these warnings enforce the standard on every page. */
+  function warnStd(fig, msg) { console.warn('[standard] ' + fig + ': ' + msg); }
+  /* where segments p1-p2 and q1-q2 meet: { at: [x, y], overlap } (touching counts), or null */
+  function segMeet(p1, p2, q1, q2) {
+    var rx = p2[0] - p1[0], ry = p2[1] - p1[1], sx = q2[0] - q1[0], sy = q2[1] - q1[1];
+    var qx = q1[0] - p1[0], qy = q1[1] - p1[1], den = rx * sy - ry * sx, eps = 1e-9;
+    if (Math.abs(den) < eps) {
+      var rr = rx * rx + ry * ry;
+      if (!rr || Math.abs(qx * ry - qy * rx) > eps) return null;   // degenerate, or parallel on separate lines
+      var t0 = (qx * rx + qy * ry) / rr, t1 = t0 + (sx * rx + sy * ry) / rr;
+      var lo = Math.max(0, Math.min(t0, t1)), hi = Math.min(1, Math.max(t0, t1));
+      return lo <= hi + eps ? { at: [p1[0] + lo * rx, p1[1] + lo * ry], overlap: hi - lo > eps } : null;
+    }
+    var t = (qx * sy - qy * sx) / den, u = (qx * ry - qy * rx) / den;
+    return t >= -eps && t <= 1 + eps && u >= -eps && u <= 1 + eps ? { at: [p1[0] + t * rx, p1[1] + t * ry], overlap: false } : null;
+  }
+  /* where polylines a and b meet: the first shared stretch if they share one, else the first crossing, else null */
+  function polyMeet(a, b) {
+    var first = null;
+    for (var i = 0; i < a.length - 1; i++) for (var j = 0; j < b.length - 1; j++) {
+      var m = segMeet(a[i], a[i + 1], b[j], b[j + 1]);
+      if (m && m.overlap) return m;
+      first = first || m;
+    }
+    return first;
+  }
+  function lintArch(fig, data, nodes, edges, steps, stages) {
+    var vb = data.viewBox || [0, 0, 1000, 500];
+    if (vb[2] > 1100 || vb[3] > 560) warnStd(fig, 'viewBox ' + vb[2] + ' × ' + vb[3] + ' (max 1100 × 560): tighten the layout, or split it into Figure 2 and 2b');
+    var nLab = edges.filter(function (ed) { return ed.label; }).length;
+    if (data.nodes.length > 20) warnStd(fig, data.nodes.length + ' nodes (max 20): split it into Figure 2 and 2b');
+    if (edges.length > 30) warnStd(fig, edges.length + ' edges (max 30): split it into Figure 2 and 2b');
+    if (nLab > 12) warnStd(fig, nLab + ' labelled edges (max 12): label an edge only where what flows is not obvious');
+    function ids(list) { return list.map(function (x) { return x.id; }).join(', '); }
+    var ne = data.nodes.filter(function (n) { return n.mismatch; }).concat(edges.filter(function (ed) { return ed.mismatch; }));
+    if (ne.length > 4) warnStd(fig, ne.length + ' ≠ badges (max 4): ' + ids(ne) + ': keep ≠ where the code changes what a block does, list the rest in the callout under the figure');
+    var nw = data.nodes.filter(function (n) { return n['new']; });
+    var nwGroups = (data.groups || []).filter(function (gr) { return gr['new']; }).map(function (gr) { return { id: 'group "' + gr.label + '"' }; });
+    if (nw.length + nwGroups.length > 6) warnStd(fig, (nw.length + nwGroups.length) + ' NEW tags (max 6): ' + ids(nw.concat(nwGroups)) + ': when 3 or more new blocks share a group, tag the group ("new": true) instead');
+    if (steps.length && stages.length) warnStd(fig, 'both steps (' + steps.length + ') and stages (' + stages.length + '): keep steps for a network, stages for a staged optimization');
+    /* crossings: edges that share no node must not meet (a shared endpoint is not a crossing). A shared track is
+       fine when it is a bus: a→b and c→d run together and a→d and c→b exist too, so every reading of it is true. */
+    var linked = {};
+    edges.forEach(function (ed) { linked[ed.from + '\n' + ed.to] = true; });
+    for (var i = 0; i < edges.length; i++) for (var j = i + 1; j < edges.length; j++) {
+      var a = edges[i], b = edges[j];
+      if (a.from === b.from || a.from === b.to || a.to === b.from || a.to === b.to) continue;
+      var m = polyMeet(a._pts, b._pts);
+      if (m && m.overlap && linked[a.from + '\n' + b.to] && linked[b.from + '\n' + a.to]) continue;
+      if (m) warnStd(fig, 'edges "' + a.id + '" and "' + b.id + '" ' + (m.overlap ? 'overlap from' : 'cross at') + ' (' + Math.round(m.at[0]) + ', ' + Math.round(m.at[1]) + '): ' + (m.overlap ? 'give each edge its own track' : 'move nodes so they do not cross'));
+    }
+    /* losses: loss flow must start or end at a loss node or a loss sum (an op such as Σ fed only by loss nodes; a gradient
+       arrow from a loss into a trained block is fine); a loss sum sends only the rec update loop */
+    var incoming = {};
+    edges.forEach(function (ed) { (incoming[ed.to] = incoming[ed.to] || []).push(ed); });
+    // an edge end may be a group (no state): never a loss, never a loss sum
+    function isLoss(id) { return !!nodes[id] && nodes[id].state === 'loss'; }
+    function isLossSum(id) {
+      var inc = incoming[id] || [];
+      return !!nodes[id] && (nodes[id].state === 'op' || isLoss(id)) && inc.length > 0 && inc.every(function (ed) { return isLoss(ed.from); });
+    }
+    edges.forEach(function (ed) {
+      if (ed.flow === 'loss' && !isLoss(ed.from) && !isLossSum(ed.from) && !isLoss(ed.to) && !isLossSum(ed.to)) warnStd(fig, 'edge "' + ed.id + '" is loss flow between "' + ed.from + '" and "' + ed.to + '", neither a loss node: draw the main path as feat or geom; loss edges start or end at a loss node');
+      if (ed.flow !== 'rec' && isLossSum(ed.from)) warnStd(fig, 'edge "' + ed.id + '" (' + ed.flow + ') leaves the loss sum "' + ed.from + '": outputs leave from the variable nodes; the sum sends only the dotted (rec) update loop');
+    });
+    data.nodes.forEach(function (n) {
+      var words = plain(n.label).split(/\s+/).filter(function (w) { return /[\p{L}\p{N}]/u.test(w); });
+      if (words.length > 3) warnStd(fig, 'node "' + n.id + '" label "' + plain(n.label) + '" has ' + words.length + ' words (max 3): name the block\'s job; the model name or size goes in the sub');
+    });
+  }
+  /* text size: [figure name, svgs], measured once the page is laid out, only on a laptop-wide window */
+  var fontChecks = [];
+  function lintFonts() {
+    if (window.innerWidth < 1200) return;
+    fontChecks.forEach(function (fc) {
+      var small = [];
+      fc[1].forEach(function (svg) {
+        $$('text', svg).forEach(function (t) {
+          var txt = t.textContent.trim(), m = t.getScreenCTM();
+          if (!txt || !m || !t.getClientRects().length) return;   // empty, or not drawn (hidden layer or tab)
+          var px = parseFloat(getComputedStyle(t).fontSize) * Math.hypot(m.a, m.b);
+          if (px < 11.95) small.push({ txt: txt.slice(0, 20), px: px });
+        });
+      });
+      if (!small.length) return;
+      // the smallest first; a repeated text (every "NEW" tag) is listed once with its count
+      var seen = {}, list = [];
+      small.sort(function (a, b) { return a.px - b.px; }).forEach(function (x) {
+        var key = x.txt + ' ' + x.px.toFixed(1);
+        if (seen[key]) { seen[key].n++; return; }
+        list.push(seen[key] = { txt: x.txt, px: x.px, n: 1 });
+      });
+      warnStd(fc[0], small.length + ' text' + (small.length === 1 ? '' : 's') + ' below 12 px at a ' + window.innerWidth + ' px window: ' + list.slice(0, 5).map(function (x) { return '"' + x.txt + '" ' + x.px.toFixed(1) + ' px' + (x.n > 1 ? ' ×' + x.n : ''); }).join(', ') + (list.length > 5 ? ', …' : '') + ': enlarge the font or draw the SVG at a larger scale');
+    });
+  }
+  /* lede length: table ledes (p.tp-lede) and section ledes (p.lede) ≤ 60 words, evidence chips not counted.
+     Run before math and tooltips change the text. */
+  function lintLedes() {
+    $$('p.tp-lede, p.lede').forEach(function (p) {
+      var copy = p.cloneNode(true);
+      $$('span.ev', copy).forEach(function (ev) { ev.remove(); });
+      var n = copy.textContent.split(/\s+/).filter(function (w) { return /[\p{L}\p{N}]/u.test(w); }).length;
+      if (n <= 60) return;
+      var table = p.classList.contains('tp-lede'), host = p.closest(table ? '[role="tabpanel"]' : 'section');
+      warnStd((table ? 'table lede' : 'section lede') + (host && host.id ? ' #' + host.id : ''), 'lede is ' + n + ' words: cut to ≤ 60 (' + (table ? 'move units and legends into the table note' : 'details go in the paragraphs below, provenance in the caption') + ')');
+    });
+  }
+
+  function Arch(host, no) {
     var data = readJSON(host);
     if (!data || !data.nodes) return;
     var self = this;
+    var unit = data.unit || LABELS.unit;   /* per-diagram step unit, e.g. "pair" on a training diagram */
     var vb = data.viewBox || [0, 0, 1000, 500];
-    var nodes = {}, edges = [], edgeById = {};
+    var nodes = {}, edges = [], edgeById = {}, groupById = {};
     var steps = data.steps || [], stages = data.stages || [];
     var stageIdx = -1, stageTimer = null, segs = [], runBtn = null, stageWeighted = {};
     stages.forEach(function (st) { Object.keys(st.terms || {}).forEach(function (id) { stageWeighted[id] = true; }); });
@@ -524,11 +674,23 @@
     var gNodes = s('g', { class: 'nodes' }, svg);
     var gPart = s('g', { class: 'particles', 'aria-hidden': 'true' }, svg);
 
-    /* groups */
+    /* groups; "new": true puts the NEW tag (as on nodes) in front of the group's label, on its baseline.
+       A group with an "id" can be an edge's from or to (an update loop into a set of variables, an output that leaves
+       it); steps and stages can list that id in "nodes" to light the frame. */
     (data.groups || []).forEach(function (gr) {
       var g = s('g', { class: 'group' + (gr.e ? ' e-' + gr.e : '') }, gGroups);
+      // its edges inherit e, so a typo would draw them black
+      if (gr.e) checkVal('group', gr.id || gr.label, 'e', gr.e, ENTITY_TXT);
+      if (gr.id) { groupById[gr.id] = gr; gr._g = g; }
       s('rect', { x: gr.x, y: gr.y, width: gr.w, height: gr.h, rx: 12 }, g);
-      var t = s('text', { x: gr.x + 10, y: gr.y + (gr.labelBelow ? gr.h + 17 : -7) }, g);
+      var lx = gr.x + 10, ly = gr.y + (gr.labelBelow ? gr.h + 17 : -7);
+      if (gr['new']) {
+        var nt = s('g', { class: 'tag-new-g' }, g);
+        s('rect', { class: 'tag-new', x: lx, y: ly - 12.8, width: 36, height: 17, rx: 3 }, nt);
+        s('text', { class: 'tag-new-t', x: lx + 18, y: ly, 'text-anchor': 'middle' }, nt).textContent = 'NEW';
+        lx += 44;
+      }
+      var t = s('text', { x: lx, y: ly }, g);
       t.textContent = gr.label || '';
     });
 
@@ -538,7 +700,13 @@
       n.e = n.e || 'neutral';
       checkVal('node', n.id, 'e', n.e, ENTITY_TXT);
       checkVal('node', n.id, 'state', n.state, STATE_TXT);
+      if (groupById[n.id]) console.error('[site.js] arch id "' + n.id + '" names both a node and a group; edges would attach to the node');
       nodes[n.id] = n;
+      // the groups whose frame holds this node: selecting it also lights their edges
+      n._groups = Object.keys(groupById).filter(function (gid) {
+        var gr = groupById[gid];
+        return n.x >= gr.x && n.y >= gr.y && n.x + n.w <= gr.x + gr.w && n.y + n.h <= gr.y + gr.h;
+      });
       var circle = n.kind === 'circle';
       var cls = 'node e-' + n.e + ' s-' + n.state + (n.shape ? ' has-shape' : '') + (n['new'] ? ' is-new' : '');
       var g = s('g', { class: cls, tabindex: '0', role: 'button', 'data-id': n.id, 'aria-label': plain(n.label) + ' (' + (STATE_TXT[n.state] || n.state) + '). Show details.' }, gNodes);
@@ -595,24 +763,26 @@
         btx.textContent = '≠';
       }
       n._g = g;
-      g.addEventListener('click', function (e) { e.stopPropagation(); select(n.id); });
+      g.addEventListener('click', function (e) { e.stopPropagation(); select(n.id); revealDetail(); });
       g.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(n.id); }
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(n.id); revealDetail(); }
         if (e.key === 'Escape') { clearAll(); }
       });
     });
 
     /* edges */
     (data.edges || []).forEach(function (ed, i) {
-      var a = nodes[ed.from], b = nodes[ed.to];
-      if (!a || !b) { console.error('[site.js] arch edge with unknown node', ed); return; }
+      // either end may be a group id: the edge is drawn along its pts (or routed to the group's frame)
+      var a = nodes[ed.from] || groupById[ed.from], b = nodes[ed.to] || groupById[ed.to];
+      if (!a || !b) { console.error('[site.js] arch edge with unknown node or group id', ed); return; }
       ed.id = ed.id || ed.from + '>' + ed.to;
       ed.flow = ed.flow || 'feat';
       checkVal('edge', ed.id, 'flow', ed.flow, FLOW_TXT);
-      // an inherited e was already checked on its source node
+      // an inherited e was already checked on its source node or group
       if (ed.e) checkVal('edge', ed.id, 'e', ed.e, ENTITY_TXT);
-      ed.e = ed.e || a.e;
+      ed.e = ed.e || a.e || 'neutral';
       var pts = ed.pts || autoPts(a, b);
+      ed._pts = pts;
       var g = s('g', { class: 'edge e-' + ed.e + ' f-' + ed.flow + (ed.shape ? ' has-shape' : ''), 'data-id': ed.id }, gEdges);
       s('title', {}, g).textContent = plain(a.label) + ' → ' + plain(b.label) + (ed.label ? ': ' + plain(ed.label) : '') + (ed.shape ? ' [' + plain(ed.shape) + ']' : '');
       var full = roundedPath(pts, 9);
@@ -668,7 +838,11 @@
       }
       svg.classList.add('has-focus');
       $$('.on', svg).forEach(function (el) { el.classList.remove('on'); });
-      (set.nodes || []).forEach(function (id) { if (nodes[id]) nodes[id]._g.classList.add('on'); else console.error('[site.js] arch step references unknown node', id); });
+      (set.nodes || []).forEach(function (id) {
+        if (nodes[id]) nodes[id]._g.classList.add('on');
+        else if (groupById[id]) groupById[id]._g.classList.add('on');   // site.css keeps a lit frame at full opacity
+        else console.error('[site.js] arch step references unknown node or group', id);
+      });
       var es = edgesFor(set);
       es.forEach(function (ed) { ed._g.classList.add('on'); });
       startParticles(es);
@@ -726,6 +900,18 @@
       detail.classList.add('has-node');
       renderMath(detail);
     }
+    /* after a click the panel below the diagram may be off screen: bring it in with the smallest scroll */
+    function revealDetail() {
+      if (detail.getBoundingClientRect().bottom > window.innerHeight) detail.scrollIntoView({ block: 'nearest', behavior: motionOK() ? 'smooth' : 'auto' });
+    }
+    /* a circle's label is a symbol ("+", "Σ", "r"): the narration names it by its detail title, else its sub,
+       "Σ (total energy)" */
+    function nameHTML(n) {
+      var d = n.detail || {};
+      if (n.kind !== 'circle' || !(d.title || n.sub)) return markHTML(n.label);
+      var name = d.title ? titleHTML(d.title) : markHTML(n.sub);   /* title as written: proper nouns keep their capital */
+      return markHTML(n.label) + ' (' + name + ')';
+    }
     function select(id) {
       pause();
       stopStages();
@@ -734,12 +920,14 @@
       if (!n) return;
       $$('.node.sel', svg).forEach(function (g) { g.classList.remove('sel'); });
       n._g.classList.add('sel');
-      var inc = edges.filter(function (ed) { return ed.from === id || ed.to === id; });
+      // the node's own edges and those of every group that holds it; both ends light (a group end lights its frame)
+      var ends = [id].concat(n._groups);
+      var inc = edges.filter(function (ed) { return ends.indexOf(ed.from) >= 0 || ends.indexOf(ed.to) >= 0; });
       var near = [id];
-      inc.forEach(function (ed) { near.push(ed.from === id ? ed.to : ed.from); });
+      inc.forEach(function (ed) { near.push(ed.from, ed.to); });
       stepIdx = -1;
       focus({ nodes: near, edges: inc.map(function (ed) { return ed.id; }) });
-      narr.innerHTML = '<span class="k">Selected</span>' + markHTML(n.label) + ' with its ' + inc.length + ' connection' + (inc.length === 1 ? '' : 's') + '. Press Esc or “Show all” to clear.';
+      narr.innerHTML = '<span class="k">Selected</span>' + nameHTML(n) + ' with its ' + inc.length + ' connection' + (inc.length === 1 ? '' : 's') + '. Press Esc or “Show all” to clear.';
       updateBar();
       showDetail(n);
     }
@@ -760,7 +948,7 @@
     /* steps */
     function restNarr() {
       narr.innerHTML = steps.length
-        ? '<span class="k">' + steps.length + ' steps</span>Full diagram shown. Press Play, or use the arrows, to follow one ' + esc(LABELS.unit) + ' through the model.'
+        ? '<span class="k">' + steps.length + ' steps</span>Full diagram shown. Press Play, or use the arrows, to follow one ' + esc(unit) + ' through the model.'
         : stages.length
           ? '<span class="k">' + stages.length + ' stages</span>Full pipeline shown. Press Run stages, or pick a stage, to see what each stage optimizes and which energy terms are on.'
           : '<span class="k">Diagram</span>Click a block for details.';
@@ -947,6 +1135,7 @@
     /* legend: only what this diagram uses */
     var used = { e: {}, s: {}, f: {}, isNew: false, ne: false };
     data.nodes.forEach(function (n) { used.e[n.e] = 1; used.s[n.state] = 1; if (n['new']) used.isNew = true; if (n.mismatch) used.ne = true; });
+    (data.groups || []).forEach(function (gr) { if (gr['new']) used.isNew = true; });
     edges.forEach(function (ed) { used.e[ed.e] = 1; used.f[ed.flow] = 1; if (ed.mismatch) used.ne = true; });
     var lg = h('div', { class: 'legend', 'aria-label': 'Legend' });
     function sw(inner) { return '<svg class="arch-svg" viewBox="0 0 30 18" aria-hidden="true">' + inner + '</svg>'; }
@@ -978,6 +1167,8 @@
 
     restNarr();
     updateBar();
+    lintArch('architecture diagram ' + no, data, nodes, edges, steps, stages);
+    fontChecks.push(['architecture diagram ' + no, [svg]]);
     self.select = select;
     self.showStep = showStep;
     self.clear = clearAll;
@@ -1311,22 +1502,26 @@
   }
 
   /* ─────────── storyboard player: frames × steps; resting state shows everything ─────────── */
-  function Story(fig) {
+  function Story(fig, no) {
     var stepEls = $$('[data-step]', fig);
     var steps = [];
     stepEls.forEach(function (el) { var k = +el.getAttribute('data-step'); if (steps.indexOf(k) < 0) steps.push(k); });
     steps.sort(function (a, b) { return a - b; });
+    fontChecks.push(['storyboard ' + no, $$('svg', fig)]);
     if (!steps.length) return;
     var frames = Math.max(1, +fig.getAttribute('data-frames') || 1);
     var ms = Math.max(250, +fig.getAttribute('data-step-ms') || 700);
     var total = frames * steps.length, i = -1, timer = null;
+    if (total * ms > 10000) warnStd('storyboard ' + no, 'a full Play run takes ' + (total * ms / 1000).toFixed(1) + ' s (' + frames + ' frames × ' + steps.length + ' steps × ' + ms + ' ms; max 10 s): fewer frames (data-frames) or a shorter data-step-ms; animate per frame only what changes');
     var worldHost = $('[data-world]', fig);
     var ctr = $('.story-controls', fig);
     if (!ctr) { ctr = h('div', { class: 'controls story-controls' }); fig.insertBefore(ctr, fig.firstChild); }
     var bPlay = h('button', { type: 'button', class: 'btn' });
     var bReplay = h('button', { type: 'button', class: 'btn', 'aria-label': 'Replay from the first ' + LABELS.unit }, icon('g-replay') + ' Replay');
     var status = h('span', { class: 'status', 'aria-live': 'polite' });
-    ctr.appendChild(bPlay); ctr.appendChild(bReplay); ctr.appendChild(status);
+    // like the diagram's "Show all": stop and return to the resting state, everything visible
+    var bAll = h('button', { type: 'button', class: 'btn story-all' }, 'Show all');
+    ctr.appendChild(bPlay); ctr.appendChild(bReplay); ctr.appendChild(status); ctr.appendChild(bAll);
     function titleOf(k) { var el = $('[data-step="' + k + '"] h3', fig); return el ? el.textContent.replace(/^\s*\d+\s*/, '').trim() : 'step ' + k; }
     function apply() {
       var world = worldHost && worldHost._world;
@@ -1335,7 +1530,7 @@
         $$('.is-current', fig).forEach(function (el) { el.classList.remove('is-current'); });
         $$('[data-frame]', fig).forEach(function (el) { el.classList.add('is-on'); });
         if (world) world.setProgress(1);
-        status.textContent = frames === 1 ? 'Showing 1 ' + LABELS.unit : 'Showing all ' + frames + ' ' + LABELS.units;
+        status.textContent = frames === 1 ? 'All steps shown' : 'Showing all ' + frames + ' ' + LABELS.units;
         return;
       }
       var f = Math.floor(i / steps.length) + 1, k = steps[i % steps.length];
@@ -1357,6 +1552,7 @@
     function stop() { clearTimeout(timer); timer = null; label(); }
     bPlay.addEventListener('click', function () { if (timer) stop(); else tick(); });
     bReplay.addEventListener('click', function () { stop(); i = -1; tick(); });
+    bAll.addEventListener('click', function () { stop(); i = -1; apply(); label(); });
     apply();
     label();
   }
@@ -1375,18 +1571,25 @@
   function init() {
     run('sprite', initSprite);
     run('toc', initToc);
+    run('standard ledes', lintLedes);
     run('math', function () { renderMath(doc); });
     run('tabs', initTabs);
     run('tables', initTables);
+    run('table width', initTableWidth);
+    run('code breaks', initCodeBreaks);
     run('tips', initTips);
     run('lightbox', initLightbox);
     run('bars', initBars);
     run('entities', initEntities);
     run('labels', initLabels);
     $$('[data-world]').forEach(function (el) { run('world', function () { new World(el); }); });
-    $$('[data-arch]').forEach(function (el) { run('arch', function () { new Arch(el); }); });
-    $$('[data-story]').forEach(function (el) { run('story', function () { new Story(el); }); });
+    $$('[data-arch]').forEach(function (el, k) { run('arch', function () { new Arch(el, k + 1); }); });
+    $$('[data-story]').forEach(function (el, k) { run('story', function () { new Story(el, k + 1); }); });
     run('pager', initPager);
+    // text sizes need the final layout
+    var fonts = function () { run('standard text size', lintFonts); };
+    var loaded = function () { if (doc.fonts && doc.fonts.ready) doc.fonts.ready.then(fonts); else fonts(); };
+    if (doc.readyState === 'complete') loaded(); else window.addEventListener('load', loaded);
   }
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', init); else init();
 })();
